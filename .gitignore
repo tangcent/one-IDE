@@ -1,0 +1,35 @@
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Node
+node_modules/
+dist/
+out/
+vscode-extension/out
+*.vsix
+
+# Java/Gradle
+.gradle/
+build/
+*.class
+*.jar
+!gradle-wrapper.jar
+
+*.war
+*.ear
+
+# One-IDE
+.one-ide/
+build/
+operations.log
+config.json
+snapshot.json
+state.json
+jetbrains-plugin/build/
+jetbrains-plugin/bin/
+
+# OS
+.DS_Store
+Thumbs.db

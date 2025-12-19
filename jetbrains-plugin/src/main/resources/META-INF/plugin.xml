@@ -1,0 +1,20 @@
+<idea-plugin>
+    <id>com.oneide.plugin</id>
+    <name>One-IDE</name>
+    <vendor>OneIDE</vendor>
+    <description>Sync file operations between IDEs</description>
+    <depends>com.intellij.modules.platform</depends>
+    
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.oneide.OneIDEPlugin"/>
+        <statusBarWidgetFactory implementation="com.oneide.OneIDEStatusBarWidgetFactory"/>
+        <applicationService serviceImplementation="com.oneide.SyncService"/>
+        <applicationConfigurable instance="com.oneide.settings.OneIDESettingsConfigurable" displayName="One-IDE" />
+    </extensions>
+
+    <actions>
+        <action id="OneIDE.ToggleSync" class="com.oneide.ToggleSyncAction" text="Toggle One-IDE Sync" description="Enable or disable One-IDE synchronization">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

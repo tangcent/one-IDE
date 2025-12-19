@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.1). If provided, files will be updated and committed.'
+        required: false
+      target:
+        description: 'Target to release (all, vscode, jetbrains)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - vscode
+        - jetbrains
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Context
+        id: ctx
+        run: |
+          # 1. Target
+          TARGET="${{ github.event.inputs.target }}"
+          [ -z "$TARGET" ] && TARGET="all"
+          echo "target=$TARGET" >> $GITHUB_OUTPUT
+
+          # 2. Version & Mode
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          
+          if [ -n "$INPUT_VERSION" ]; then
+             echo "Using manual input version: $INPUT_VERSION"
+             echo "version=$INPUT_VERSION" >> $GITHUB_OUTPUT
+             echo "update_files=true" >> $GITHUB_OUTPUT
+             echo "should_release=true" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ ^(chore\(release\)|release):[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+             VERSION="${BASH_REMATCH[2]}"
+             echo "Detected release commit. Version: $VERSION"
+             echo "version=$VERSION" >> $GITHUB_OUTPUT
+             echo "update_files=false" >> $GITHUB_OUTPUT
+             echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+             echo "No release trigger detected."
+             echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Node.js
+        if: steps.ctx.outputs.should_release == 'true'
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Set up JDK 17
+        if: steps.ctx.outputs.should_release == 'true'
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Update Version & Commit
+        if: steps.ctx.outputs.update_files == 'true'
+        run: |
+          chmod +x script/update_version.sh
+          ./script/update_version.sh ${{ steps.ctx.outputs.target }} ${{ steps.ctx.outputs.version }}
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore(release): bump version to ${{ steps.ctx.outputs.version }}"
+          git push
+
+      - name: Build
+        if: steps.ctx.outputs.should_release == 'true'
+        run: |
+          chmod +x script/build.sh
+          ./script/build.sh ${{ steps.ctx.outputs.target }}
+
+      - name: Generate Release Notes
+        if: steps.ctx.outputs.should_release == 'true'
+        id: notes
+        run: |
+          chmod +x script/release_note.sh
+          ./script/release_note.sh ${{ steps.ctx.outputs.target }} > release_notes.md
+          
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: steps.ctx.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.ctx.outputs.version }}
+          name: Release v${{ steps.ctx.outputs.version }}
+          body: ${{ steps.notes.outputs.content }}
+          files: |
+            vscode-extension/*.vsix
+            jetbrains-plugin/build/distributions/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
