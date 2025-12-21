@@ -9,6 +9,13 @@ let syncService: SyncService;
 let ruleService: RuleService;
 let configService: ConfigService;
 
+/**
+ * Activates the extension.
+ * This function is called when the extension is activated (e.g., on startup or when a command is triggered).
+ * It initializes the core services: ConfigService, SyncService, and RuleService.
+ * 
+ * @param context The extension context provided by VS Code.
+ */
 export function activate(context: vscode.ExtensionContext) {
     Logger.log('Activating extension...');
 

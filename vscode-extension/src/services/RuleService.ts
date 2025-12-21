@@ -328,6 +328,7 @@ export class RuleService {
 
     /**
      * Checks if a lock exists and is valid (not stale) for the given AI tool.
+     * A lock is considered stale if it's older than 3 minutes.
      * 
      * @param rootPath The project root path.
      * @param aiTool The AI tool identifier.

@@ -7,16 +7,16 @@ VS_FILTER="\(vscode\)|\[vscode\]|vscode:"
 
 # --- Helper: Select Target ---
 select_target() {
-    echo "Select target:"
-    echo "1) All"
-    echo "2) VS Code"
-    echo "3) JetBrains"
+    echo "Select target:" >&2
+    echo "1) All" >&2
+    echo "2) VS Code" >&2
+    echo "3) JetBrains" >&2
     read -p "Enter choice [1-3]: " CHOICE
     case $CHOICE in
         1) TARGET="all" ;;
         2) TARGET="vscode" ;;
         3) TARGET="jetbrains" ;;
-        *) echo "Invalid choice"; exit 1 ;;
+        *) echo "Invalid choice" >&2; exit 1 ;;
     esac
 }
 
@@ -32,7 +32,7 @@ if [ -z "$PREV_TAG" ]; then
   if git describe --tags --abbrev=0 >/dev/null 2>&1; then
       PREV_TAG=$(git describe --tags --abbrev=0)
   else
-      echo "No tags found. Generating notes for all commits."
+      echo "No tags found. Generating notes for all commits." >&2
       PREV_TAG=""
   fi
 fi
@@ -42,7 +42,7 @@ if [ -n "$PREV_TAG" ]; then
     RANGE="$PREV_TAG..HEAD"
 fi
 
-echo "Generating release notes for range: $RANGE"
+echo "Generating release notes for range: $RANGE" >&2
 
 # --- Function: Get Logs ---
 # usage: get_logs <exclude_pattern> <format>
@@ -56,15 +56,21 @@ get_logs() {
 # --- JetBrains Logic ---
 if [ "$TARGET" == "jetbrains" ] || [ "$TARGET" == "all" ]; then
     CHANGES_FILE="$(dirname "$0")/../jetbrains-plugin/parts/pluginChanges.html"
-    echo "Writing JetBrains change notes to $CHANGES_FILE"
+    echo "Writing JetBrains change notes to $CHANGES_FILE" >&2
     
     # Exclude VS Code specific commits
     LOGS=$(get_logs "$VS_FILTER" "<li>%s</li>")
+    MD_LOGS=$(get_logs "$VS_FILTER" "- %s")
     
     if [ -n "$LOGS" ]; then
         echo "<ul>" > "$CHANGES_FILE"
         echo "$LOGS" >> "$CHANGES_FILE"
         echo "</ul>" >> "$CHANGES_FILE"
+        
+        # Output for Release Body
+        echo "## JetBrains Plugin Changes"
+        echo "$MD_LOGS"
+        echo ""
     else
         echo "<p>No significant changes.</p>" > "$CHANGES_FILE"
     fi
@@ -73,7 +79,7 @@ fi
 # --- VS Code Logic ---
 if [ "$TARGET" == "vscode" ] || [ "$TARGET" == "all" ]; then
     CHANGELOG_FILE="$(dirname "$0")/../vscode-extension/CHANGELOG.md"
-    echo "Updating VS Code changelog at $CHANGELOG_FILE"
+    echo "Updating VS Code changelog at $CHANGELOG_FILE" >&2
     
     # Exclude JetBrains specific commits
     LOGS=$(get_logs "$JB_FILTER" "- %s")
@@ -112,8 +118,13 @@ if [ "$TARGET" == "vscode" ] || [ "$TARGET" == "all" ]; then
         fi
         
         rm "$TEMP_FILE"
-        echo "VS Code changelog updated."
+        echo "VS Code changelog updated." >&2
+        
+        # Output for Release Body
+        echo "## VS Code Extension Changes"
+        echo "$LOGS"
+        echo ""
     else
-        echo "No significant changes for VS Code."
+        echo "No significant changes for VS Code." >&2
     fi
 fi

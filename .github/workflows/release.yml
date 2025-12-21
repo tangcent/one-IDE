@@ -45,42 +45,36 @@ jobs:
              echo "Using manual input version: $INPUT_VERSION"
              echo "version=$INPUT_VERSION" >> $GITHUB_OUTPUT
              echo "update_files=true" >> $GITHUB_OUTPUT
-             echo "should_release=true" >> $GITHUB_OUTPUT
-          elif [[ "$COMMIT_MSG" =~ ^(chore\(release\)|release):[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-             VERSION="${BASH_REMATCH[2]}"
-             echo "Detected release commit. Version: $VERSION"
+             echo "should_setup=true" >> $GITHUB_OUTPUT
+             echo "should_release=false" >> $GITHUB_OUTPUT
+          elif echo "$COMMIT_MSG" | grep -iq "release"; then
+             # Case insensitive check for 'release'
+             # Extract version from package.json since we assume files are updated
+             VERSION=$(grep '"version":' vscode-extension/package.json | head -n 1 | sed -E 's/.*"version": "(.*)",/\1/')
+             echo "Detected release commit. Version from package.json: $VERSION"
              echo "version=$VERSION" >> $GITHUB_OUTPUT
              echo "update_files=false" >> $GITHUB_OUTPUT
+             echo "should_setup=true" >> $GITHUB_OUTPUT
              echo "should_release=true" >> $GITHUB_OUTPUT
           else
              echo "No release trigger detected."
+             echo "should_setup=false" >> $GITHUB_OUTPUT
              echo "should_release=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up Node.js
-        if: steps.ctx.outputs.should_release == 'true'
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
 
       - name: Set up JDK 17
-        if: steps.ctx.outputs.should_release == 'true'
+        if: steps.ctx.outputs.should_setup == 'true'
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Update Version & Commit
-        if: steps.ctx.outputs.update_files == 'true'
-        run: |
-          chmod +x script/update_version.sh
-          ./script/update_version.sh ${{ steps.ctx.outputs.target }} ${{ steps.ctx.outputs.version }}
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "chore(release): bump version to ${{ steps.ctx.outputs.version }}"
-          git push
 
       - name: Build
         if: steps.ctx.outputs.should_release == 'true'
@@ -93,6 +87,7 @@ jobs:
         id: notes
         run: |
           chmod +x script/release_note.sh
+          # The script now outputs markdown notes to stdout
           ./script/release_note.sh ${{ steps.ctx.outputs.target }} > release_notes.md
           
           echo "content<<EOF" >> $GITHUB_OUTPUT

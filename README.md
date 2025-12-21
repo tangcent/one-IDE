@@ -1,5 +1,6 @@
 # One-IDE
 
+[![CI](https://github.com/tangcent/one-IDE/actions/workflows/ci.yml/badge.svg)](https://github.com/tangcent/one-IDE/actions/workflows/ci.yml)
 [![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/29454?color=blue&label=JetBrains%20Plugin)](https://plugins.jetbrains.com/plugin/29454-one-ide)
 [![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/29454?label=Downloads)](https://plugins.jetbrains.com/plugin/29454-one-ide)
 [![VS Code Extension Version](https://img.shields.io/visual-studio-marketplace/v/tangcent.one-ide?color=blue&label=VS%20Code%20Extension)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
