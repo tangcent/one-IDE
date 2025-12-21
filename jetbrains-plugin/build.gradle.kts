@@ -3,8 +3,8 @@ plugins {
     kotlin("jvm") version "1.9.22"
 }
 
-group = "com.oneide"
-version = "1.0.0"
+group = "com.itangcent.oneide"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -28,7 +28,7 @@ tasks {
         pluginDescription.set(file("parts/pluginDescription.html").readText())
         changeNotes.set(file("parts/pluginChanges.html").readText())
     }
-    
+
     buildPlugin {
         archiveBaseName.set("one-ide")
     }
