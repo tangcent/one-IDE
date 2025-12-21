@@ -17,3 +17,5 @@ One-IDE is built for developers who work across multiple environments simultaneo
 ## Installation Note
 
 To enable cross-platform synchronization, ensure the One-IDE extension is installed in every environment you use (including JetBrains IDEs, VS Code, and VS Code forks like Cursor or Trae).
+
+For JetBrains IDEs, install the [One-IDE Plugin](https://plugins.jetbrains.com/plugin/29454-one-ide).

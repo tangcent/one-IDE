@@ -1,5 +1,10 @@
 # One-IDE
 
+[![JetBrains Plugin Version](https://img.shields.io/jetbrains/plugin/v/29454?color=blue&label=JetBrains%20Plugin)](https://plugins.jetbrains.com/plugin/29454-one-ide)
+[![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/29454?label=Downloads)](https://plugins.jetbrains.com/plugin/29454-one-ide)
+[![VS Code Extension Version](https://img.shields.io/visual-studio-marketplace/v/tangcent.one-ide?color=blue&label=VS%20Code%20Extension)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
+[![VS Code Extension Downloads](https://img.shields.io/visual-studio-marketplace/d/tangcent.one-ide?label=Downloads)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
+
 One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools. 
  
  Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.
@@ -35,6 +40,24 @@ Supported AI Tools:
 - Qoder (`.qoder`)
 
 ## Installation
+
+### JetBrains IDEs
+
+1. Open **Settings/Preferences** > **Plugins** > **Marketplace**.
+2. Search for `One-IDE`.
+3. Click **Install**.
+
+Alternatively, you can download it from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/29454-one-ide).
+
+### VS Code (and forks)
+
+1. Open the **Extensions** view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+2. Search for `One-IDE`.
+3. Click **Install**.
+
+Alternatively, you can install it from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide).
+
+## Development
 
 ### Prerequisites
 
