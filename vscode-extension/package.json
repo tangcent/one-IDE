@@ -58,7 +58,8 @@
             "JetBrains",
             "Junie",
             "Qodo",
-            "Qoder"
+            "Qoder",
+            "Antigravity"
           ],
           "default": "Auto",
           "description": "Explicitly set the current AI tool. Use 'Auto' to detect automatically."

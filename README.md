@@ -6,8 +6,8 @@
 [![VS Code Extension Version](https://img.shields.io/visual-studio-marketplace/v/tangcent.one-ide?color=blue&label=VS%20Code%20Extension)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
 [![VS Code Extension Downloads](https://img.shields.io/visual-studio-marketplace/d/tangcent.one-ide?label=Downloads)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
 
-One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools. 
- 
+One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools.
+
  Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.
 
 ## Features
@@ -17,12 +17,12 @@ One-IDE is built for developers who work across multiple environments simultaneo
 
 ## Architecture
 
-The system consists of two plugins:
+The system consists of two plugins that work together to synchronize editor state and AI project rules:
 
-1. **VS Code Extension**: Watches editor changes (active tab, cursor) and writes to the operations log; watches the log for changes from other IDEs.
-2. **JetBrains Plugin**: Performs the same role for IntelliJ IDEA, WebStorm, etc.
+1. **VS Code Extension**: Supports VS Code and its forks (Cursor, Antigravity, etc.)
+2. **JetBrains Plugin**: Supports JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, etc.)
 
-Both plugins share the `~/.one-ide` directory for storing the logs and configuration.
+Both plugins share the same global configuration. And all connected IDEs will sync their states and rules with each other.
 
 ## AI Rules Sync
 
@@ -39,6 +39,7 @@ Supported AI Tools:
 - Junie (`.junie`)
 - Qodo (`.codiumai.toml`, `.codiumai.yaml`)
 - Qoder (`.qoder`)
+- Antigravity (`.antigravity/rules`)
 
 ## Installation
 

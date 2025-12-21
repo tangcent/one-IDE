@@ -62,6 +62,13 @@
             "ruleRoot": ".codiumai.toml",
             "strategy": "single-file",
             "plugins": ["Codium.codium"]
+        },
+        {
+            "name": "Antigravity",
+            "patterns": [".antigravity/rules/**/*"],
+            "ruleRoot": ".antigravity/rules",
+            "strategy": "folder",
+            "plugins": []
         }
     ]
 }
