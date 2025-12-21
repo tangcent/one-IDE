@@ -3,7 +3,7 @@
   "displayName": "One-IDE",
   "icon": "icon.png",
   "description": "Seamlessly sync your editors across JetBrains IDEs and VS Code, with automatic AI project rule adaptation.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -48,7 +48,18 @@
         },
         "oneIde.ai.currentTool": {
           "type": "string",
-          "enum": ["Auto", "Trae", "Cursor", "Windsurf", "Copilot", "Claude", "JetBrains", "Junie", "Qodo", "Qoder"],
+          "enum": [
+            "Auto",
+            "Trae",
+            "Cursor",
+            "Windsurf",
+            "Copilot",
+            "Claude",
+            "JetBrains",
+            "Junie",
+            "Qodo",
+            "Qoder"
+          ],
           "default": "Auto",
           "description": "Explicitly set the current AI tool. Use 'Auto' to detect automatically."
         }

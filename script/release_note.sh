@@ -4,6 +4,7 @@ set -e
 # --- Configuration ---
 JB_FILTER="\(jetbrains\)|\[jetbrains\]|jetbrains:|idea:|intellij:"
 VS_FILTER="\(vscode\)|\[vscode\]|vscode:"
+IGNORE_FILTER="^release:|^chore:"
 
 # --- Helper: Select Target ---
 select_target() {
@@ -49,8 +50,12 @@ echo "Generating release notes for range: $RANGE" >&2
 get_logs() {
     local EXCLUDE=$1
     local FMT=$2
-    # Get logs, filter out the excluded pattern
-    git log --pretty=format:"$FMT" "$RANGE" | grep -v -iE "$EXCLUDE" || true
+    # Get logs, filter out the excluded pattern and ignored types
+    git log --pretty=format:"%s" "$RANGE" | grep -v -iE "$EXCLUDE" | grep -v -iE "$IGNORE_FILTER" | while read -r line; do
+        # Use a temporary variable to construct the output to avoid printf option issues
+        local ITEM="${FMT//%s/$line}"
+        echo "$ITEM"
+    done || true
 }
 
 # --- JetBrains Logic ---
