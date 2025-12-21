@@ -19,10 +19,14 @@ import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
 import com.intellij.util.Consumer
 import java.awt.event.MouseEvent
+import com.oneide.services.RuleService
 
 class OneIDEPlugin : StartupActivity {
     override fun runActivity(project: Project) {
-        val syncService = SyncService.instance
+        val syncService = SyncService.getInstance(project)
+        
+        // Start Rule Service
+        RuleService(project).start()
         
         // Listen for file activation and close
         project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
@@ -70,11 +74,12 @@ class OneIDEPlugin : StartupActivity {
 
 class ToggleSyncAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
-        val syncService = SyncService.instance
+        val project = e.project ?: return
+        val syncService = SyncService.getInstance(project)
         syncService.isEnabled = !syncService.isEnabled
         
         val status = if (syncService.isEnabled) "Enabled" else "Disabled"
-        Messages.showInfoMessage("One-IDE Sync: $status", "One-IDE")
+        Messages.showInfoMessage("One-IDE Sync for ${project.name}: $status", "One-IDE")
     }
 }
 
@@ -98,7 +103,7 @@ class OneIDEStatusBarWidgetFactory : StatusBarWidgetFactory {
             override fun dispose() {}
 
             override fun getText(): String {
-                return if (SyncService.instance.isEnabled) "One-IDE: On" else "One-IDE: Off"
+                return if (SyncService.getInstance(project).isEnabled) "One-IDE: On" else "One-IDE: Off"
             }
 
             override fun getTooltipText(): String = "Click to toggle One-IDE Synchronization"
@@ -107,7 +112,8 @@ class OneIDEStatusBarWidgetFactory : StatusBarWidgetFactory {
 
             override fun getClickConsumer(): Consumer<MouseEvent> = Consumer {
                 // Toggle on click
-                SyncService.instance.isEnabled = !SyncService.instance.isEnabled
+                val syncService = SyncService.getInstance(project)
+                syncService.isEnabled = !syncService.isEnabled
                 // Update is handled by SyncService setter calling updateAllStatusBars
             }
         }

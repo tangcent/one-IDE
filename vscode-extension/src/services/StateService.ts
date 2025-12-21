@@ -9,6 +9,7 @@ export class StateService {
     private processingCount: number = 0;
     private onStateChanged: (state: State) => void;
     private lastFileSize: number = 0;
+    private watcher: fs.FSWatcher | null = null;
 
     constructor(
         oneIdeDir: string, 
@@ -20,15 +21,19 @@ export class StateService {
         this.init();
     }
 
+    public dispose() {
+        if (this.watcher) {
+            this.watcher.close();
+            this.watcher = null;
+        }
+    }
+
     private init() {
         if (!fs.existsSync(this.stateFile)) {
             // Optional: Create if not exists, or just wait for write
         } else {
             this.lastFileSize = fs.statSync(this.stateFile).size;
-            const state = this.readStateFromFile();
-            if (state) {
-                IdeMetaData.getInstance().lastKnownTimestamp = state.timestamp;
-            }
+            this.readLatestState();
         }
         this.watchStateFile();
     }
@@ -45,19 +50,24 @@ export class StateService {
         return this.processingCount > 0;
     }
 
-    public getLastKnownTimestamp(): number {
-        return IdeMetaData.getInstance().lastKnownTimestamp;
+    public getLastCheckPoint(): number {
+        return IdeMetaData.getInstance().lastCheckPoint;
     }
 
-    private readStateFromFile(): State | null {
-        if (!fs.existsSync(this.stateFile)) return null;
+    /**
+     * Reads state file and returns [BestMatchingState, MaxTimestamp]
+     */
+    private readStateFromFile(): [State | null, number] {
+        if (!fs.existsSync(this.stateFile)) return [null, 0];
         try {
             const content = fs.readFileSync(this.stateFile, 'utf-8');
             const lines = content.trim().split('\n');
-            if (lines.length === 0) return null;
+            if (lines.length === 0) return [null, 0];
 
             const currentPath = this.getCurrentProjectPath();
             const meta = IdeMetaData.getInstance();
+            let maxTimestamp = 0;
+            let bestState: State | null = null;
 
             for (let i = lines.length - 1; i >= 0; i--) {
                 const line = lines[i].trim();
@@ -65,28 +75,37 @@ export class StateService {
 
                 try {
                     const state = JSON.parse(line) as State;
-                    if (state.timestamp <= meta.lastKnownTimestamp) {
-                        return null;
+                    
+                    if (state.timestamp > maxTimestamp) {
+                        maxTimestamp = state.timestamp;
+                    }
+
+                    if (state.timestamp <= meta.lastCheckPoint) {
+                        break;
                     }
                     
+                    if (bestState) continue;
+
                     if (currentPath) {
                         const rootPath = state.root.path;
                         if (rootPath === currentPath || rootPath.includes(currentPath) || currentPath.includes(rootPath)) {
-                            return state;
+                            bestState = state;
+                        } else {
+                            Logger.log(`Discard state: path mismatch. State root: ${rootPath}, Current: ${currentPath}`);
                         }
                     } else {
-                        // If we can't verify path, skip? Or return?
-                        // Consistent with Kotlin logic: continue if path cannot be verified against current project.
-                        continue;
+                        Logger.log(`Discard state: current project path is undefined. State root: ${state.root.path}`);
+                        // continue;
                     }
                 } catch (e) {
                     // ignore
                 }
             }
+            return [bestState, maxTimestamp];
         } catch (e) {
             Logger.error('Failed to read state file:', e);
         }
-        return null;
+        return [null, 0];
     }
 
     public appendState(state: State) {
@@ -99,11 +118,11 @@ export class StateService {
 
         try {
             // Conflict Check
-            const currentState = this.readStateFromFile();
+            const [currentState, _] = this.readStateFromFile();
             const meta = IdeMetaData.getInstance();
-            if (currentState && currentState.timestamp > meta.lastKnownTimestamp) {
-                Logger.log(`Conflict detected. Local: ${meta.lastKnownTimestamp}, Remote: ${currentState.timestamp}`);
-                meta.lastKnownTimestamp = currentState.timestamp;
+            if (currentState && currentState.timestamp > meta.lastCheckPoint) {
+                Logger.log(`Conflict detected. Local: ${meta.lastCheckPoint}, Remote: ${currentState.timestamp}`);
+                meta.lastCheckPoint = currentState.timestamp;
                 this.onStateChanged(currentState);
                 return;
             }
@@ -137,7 +156,7 @@ export class StateService {
                 fs.appendFileSync(this.stateFile, line);
                 this.lastFileSize += line.length;
             }
-            meta.lastKnownTimestamp = state.timestamp;
+            meta.lastCheckPoint = state.timestamp;
         } catch (e) {
             Logger.error('Failed to append state:', e);
         }
@@ -149,7 +168,7 @@ export class StateService {
         
         let fsWait: NodeJS.Timeout | null = null;
         try {
-            fs.watch(dir, (eventType, filename) => {
+            this.watcher = fs.watch(dir, (eventType, filename) => {
                 if (filename === 'state.json') {
                     if (fsWait) return;
                     fsWait = setTimeout(() => {
@@ -167,10 +186,14 @@ export class StateService {
         if (!fs.existsSync(this.stateFile)) return;
 
         try {
-            const state = this.readStateFromFile();
+            const [state, maxTimestamp] = this.readStateFromFile();
             const meta = IdeMetaData.getInstance();
-            if (state && state.timestamp > meta.lastKnownTimestamp) {
-                meta.lastKnownTimestamp = state.timestamp;
+            
+            if (maxTimestamp > meta.lastCheckPoint) {
+                meta.lastCheckPoint = maxTimestamp;
+            }
+
+            if (state) {
                 this.onStateChanged(state);
             }
         } catch (e) {

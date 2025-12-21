@@ -2,6 +2,7 @@ package com.oneide
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.Disposable
 import com.oneide.utils.Logger
 import com.oneide.utils.Debouncer
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -24,19 +25,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.Timer
 
-@Service
-class SyncService {
+@Service(Service.Level.PROJECT)
+class SyncService(private val project: Project) : Disposable {
+    val metaData = IdeMetaData.getInstance(project)
     private val pendingState = AtomicReference<State?>()
     private val isProcessingState = AtomicBoolean(false)
     private val executor = Executors.newSingleThreadExecutor()
     private val oneIdeDir = Paths.get(System.getProperty("user.home"), ".one-ide")
 
     private val configService = ConfigService(oneIdeDir)
-    private val stateService = StateService(oneIdeDir, this::handleStateChange) {
-        activeProject?.basePath ?: ProjectManager.getInstance().openProjects.firstOrNull()?.basePath
+    private val stateService = StateService(oneIdeDir, metaData, this::handleStateChange) {
+        project.basePath
     }
 
-    private var activeProject: Project? = null
+    private var activeProject: Project? = project
 
     private val postDebouncer = Debouncer(300)
     private val applyDebouncer = Debouncer(300)
@@ -44,17 +46,25 @@ class SyncService {
     var isEnabled: Boolean = true
         set(value) {
             field = value
-            Logger.info("One-IDE Sync enabled: $value")
+            Logger.info("One-IDE Sync enabled: $value", metaData)
             updateAllStatusBars()
         }
 
     init {
-        Logger.info("One-IDE SyncService initialized. SourceID: ${IdeMetaData.id}")
+        Logger.info("One-IDE SyncService initialized. SourceID: ${metaData.id}", metaData)
+    }
+
+    override fun dispose() {
+        Logger.info("Disposing SyncService for ${project.name}", metaData)
+        postDebouncer.cancel()
+        applyDebouncer.cancel()
+        executor.shutdownNow()
+        configService.dispose()
+        stateService.dispose()
     }
 
     companion object {
-        val instance: SyncService
-            get() = ApplicationManager.getApplication().getService(SyncService::class.java)
+        fun getInstance(project: Project): SyncService = project.getService(SyncService::class.java)
     }
 
     fun updateConfig(newConfig: Config) {
@@ -79,7 +89,7 @@ class SyncService {
         // we assume this event is a delayed echo or side-effect of the sync, so we ignore it.
         val window = WindowManager.getInstance().suggestParentWindow(project)
         if (window != null && !window.isActive) {
-            val timeSinceLastSync = System.currentTimeMillis() - stateService.getLastKnownTimestamp()
+            val timeSinceLastSync = System.currentTimeMillis() - stateService.getLastCheckPoint()
             if (timeSinceLastSync < 5000) {
                 // Logger.info("Ignoring background event (Last sync: ${timeSinceLastSync}ms ago)")
                 return
@@ -172,14 +182,14 @@ class SyncService {
 
         return State(
             timestamp = System.currentTimeMillis(),
-            source = IdeMetaData.id,
+            source = metaData.id,
             ide = "jetbrains",
             root = rootNode
         )
     }
 
     private fun handleStateChange(state: State) {
-        if (!isEnabled || state.source == IdeMetaData.id) return
+        if (!isEnabled || state.source == metaData.id) return
 
         pendingState.set(state)
 

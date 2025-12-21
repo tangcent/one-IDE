@@ -1,7 +1,8 @@
 {
   "name": "one-ide",
   "displayName": "One-IDE",
-  "description": "Sync file operations between IDEs",
+  "icon": "icon.png",
+  "description": "Seamlessly sync your editors across JetBrains IDEs and VS Code, with automatic AI project rule adaptation.",
   "version": "1.0.0",
   "engines": {
     "vscode": "^1.85.0"
@@ -9,6 +10,12 @@
   "categories": [
     "Other"
   ],
+  "publisher": "tangcent",
+  "author": {
+    "name": "tangcent",
+    "email": "pentatangcent@gmail.com",
+    "url": "https://github.com/tangcent/one-IDE"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/tangcent/one-IDE"
@@ -33,6 +40,17 @@
           "type": "boolean",
           "default": false,
           "description": "Whether to exclude files ignored by .gitignore."
+        },
+        "oneIde.ai.syncRules": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI Project Rules synchronization."
+        },
+        "oneIde.ai.currentTool": {
+          "type": "string",
+          "enum": ["Auto", "Trae", "Cursor", "Windsurf", "Copilot", "Claude", "JetBrains", "Junie", "Qodo", "Qoder"],
+          "default": "Auto",
+          "description": "Explicitly set the current AI tool. Use 'Auto' to detect automatically."
         }
       }
     }

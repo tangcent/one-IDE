@@ -1,27 +1,19 @@
 # One-IDE VS Code Extension
 
-This extension synchronizes file operations (Open, Close, Cursor Move) between VS Code and other IDEs (like IntelliJ IDEA) using the One-IDE protocol.
+One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools.
+
+ Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.
 
 ## Features
 
-- **File Synchronization**: Automatically opens files opened in other IDEs.
-- **Cursor Synchronization**: Shows cursor position from other IDEs.
-- **Status Bar Integration**: Quickly toggle synchronization on/off.
-
-## Installation
-
-1. Clone the repository.
-2. Open the `vscode-extension` folder in VS Code.
-3. Run `npm install` to install dependencies.
-4. Run `npm run compile` to build the extension.
-5. Press `F5` to start debugging, or package it using `vsce package`.
+- **Cross-IDE Synchronization**: Syncs active file and cursor position between VS Code and JetBrains IDEs.
+- **AI Project Rules Synchronization**: Automatically detects and syncs AI project rules (e.g., `.cursorrules`, `.trae/rules`) between different AI coding tools.
 
 ## Usage
 
 - The extension starts automatically.
 - Click the "One-IDE" status bar item to toggle synchronization.
-- Logs are stored in `~/.one-ide/operations.log`.
 
-## Configuration
+## Installation Note
 
-No additional configuration is required. The extension uses the `~/.one-ide` directory for synchronization.
+To enable cross-platform synchronization, ensure the One-IDE extension is installed in every environment you use (including JetBrains IDEs, VS Code, and VS Code forks like Cursor or Trae).

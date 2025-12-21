@@ -7,8 +7,13 @@ const ignore = require('ignore');
 import { Config } from '../types';
 import { Logger } from '../logger';
 
-export class ConfigService {
-    private config: Config = { excludeFiles: [], excludeGitIgnore: false };
+export class ConfigService implements vscode.Disposable {
+    private config: Config = { 
+        excludeFiles: [], 
+        excludeGitIgnore: false,
+        syncRules: true,
+        currentTool: 'Auto'
+    };
     private gitIgnoreCache: Map<string, any> = new Map();
     private configFile: string;
     private oneIdeDir: string;
@@ -29,14 +34,31 @@ export class ConfigService {
         this.ensureOneIdeDir();
         this.loadConfig();
         
+        // Watch for VS Code configuration changes (Project Settings)
         const configListener = vscode.workspace.onDidChangeConfiguration(event => {
             if (event.affectsConfiguration('oneIde')) {
-                Logger.log('Configuration changed, reloading...');
+                Logger.log('VS Code Configuration changed, reloading...');
                 this.loadConfig();
-                this.saveConfigToDisk();
             }
         });
         this.disposables.push(configListener);
+
+        // Watch for config.json changes (Global Settings)
+        try {
+            fs.watchFile(this.configFile, (curr, prev) => {
+                if (curr.mtime !== prev.mtime) {
+                    Logger.log('Config file changed, reloading...');
+                    this.loadConfig();
+                }
+            });
+            this.disposables.push({ dispose: () => fs.unwatchFile(this.configFile) });
+        } catch (e) {
+            Logger.error('Failed to watch config file:', e);
+        }
+    }
+
+    public getConfig(): Config {
+        return this.config;
     }
 
     private ensureOneIdeDir() {
@@ -51,23 +73,59 @@ export class ConfigService {
 
     private loadConfig() {
         try {
-            const config = vscode.workspace.getConfiguration('oneIde');
+            // 1. Load Global Settings from config.json
+            let globalConfig: Partial<Config> = {};
+            if (fs.existsSync(this.configFile)) {
+                try {
+                    const content = fs.readFileSync(this.configFile, 'utf-8');
+                    const json = JSON.parse(content);
+                    globalConfig = {
+                        excludeFiles: json.excludeFiles || [],
+                        excludeGitIgnore: json.excludeGitIgnore || false
+                    };
+                } catch (e) {
+                    Logger.error('Failed to parse config.json', e);
+                }
+            }
+
+            // 2. Load Project Settings from VS Code
+            const vscodeConfig = vscode.workspace.getConfiguration('oneIde');
+            
             this.config = {
-                excludeFiles: config.get<string[]>('excludeFiles', []),
-                excludeGitIgnore: config.get<boolean>('excludeGitIgnore', false)
+                excludeFiles: globalConfig.excludeFiles || [],
+                excludeGitIgnore: globalConfig.excludeGitIgnore || false,
+                syncRules: vscodeConfig.get<boolean>('ai.syncRules', true),
+                currentTool: vscodeConfig.get<string>('ai.currentTool', 'Auto')
             };
+
             Logger.log('Loaded config:', this.config);
         } catch (e) {
             Logger.error('Failed to load config:', e);
         }
     }
 
-    private saveConfigToDisk() {
-        Logger.log(`Attempting to save config to: ${this.configFile}`);
+    public updateConfig(newConfig: Config) {
+        this.config = newConfig;
+
+        // 1. Save Global Settings to config.json
+        this.saveGlobalConfig();
+
+        // 2. Save Project Settings to VS Code
+        const config = vscode.workspace.getConfiguration('oneIde');
+        config.update('ai.syncRules', newConfig.syncRules, vscode.ConfigurationTarget.Workspace);
+        config.update('ai.currentTool', newConfig.currentTool, vscode.ConfigurationTarget.Workspace);
+    }
+
+    private saveGlobalConfig() {
+        Logger.log(`Attempting to save global config to: ${this.configFile}`);
         try {
             this.ensureOneIdeDir();
-            fs.writeFileSync(this.configFile, JSON.stringify(this.config, null, 2));
-            Logger.log('Saved config to disk:', this.configFile);
+            const globalContent = {
+                excludeFiles: this.config.excludeFiles,
+                excludeGitIgnore: this.config.excludeGitIgnore
+            };
+            fs.writeFileSync(this.configFile, JSON.stringify(globalContent, null, 2));
+            Logger.log('Saved global config to disk:', this.configFile);
         } catch (e) {
             Logger.error('Failed to save config to disk:', e);
         }

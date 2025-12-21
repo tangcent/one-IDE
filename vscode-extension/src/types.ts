@@ -20,6 +20,11 @@ export interface State {
 }
 
 export interface Config {
+    // Global (from config.json)
     excludeFiles: string[];
     excludeGitIgnore: boolean;
+
+    // Project (from IDE settings)
+    syncRules: boolean;
+    currentTool: string;
 }

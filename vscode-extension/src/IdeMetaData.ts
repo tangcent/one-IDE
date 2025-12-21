@@ -5,7 +5,7 @@ export class IdeMetaData {
     public readonly id: string;
     public readonly ide: 'vscode' | 'jetbrains' = 'vscode';
     public readonly appName: string;
-    public lastKnownTimestamp: number = 0;
+    public lastCheckPoint: number = 0;
 
     private constructor() {
         // random 6 characters

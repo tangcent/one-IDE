@@ -14,6 +14,7 @@ import com.oneide.models.IdeMetaData
 
 class StateService(
     oneIdeDir: Path,
+    private val metaData: IdeMetaData,
     private val onStateChanged: (State) -> Unit,
     private val getCurrentProjectPath: () -> String?
 ) {
@@ -22,20 +23,31 @@ class StateService(
     private val oneIdePath = oneIdeDir
     private var isProcessing = AtomicInteger(0)
     private val isRunning = AtomicBoolean(true)
+    private var watchService: java.nio.file.WatchService? = null
 
     init {
         initStateFile()
         startWatching()
-        // Initialize lastKnownTimestamp
-        readStateFromFile()?.let { IdeMetaData.lastKnownTimestamp = it.timestamp }
+        // Initialize lastCheckPoint
+        readLatestState()
+    }
+
+    fun dispose() {
+        isRunning.set(false)
+        try {
+            watchService?.close()
+        } catch (e: Exception) {
+            // Ignore
+        }
     }
 
     private fun initStateFile() {
         if (!stateFile.exists()) {
+            stateFile.parentFile?.mkdirs()
             try {
                 stateFile.createNewFile()
             } catch (e: Exception) {
-                Logger.error("Failed to create state file", e)
+                Logger.error("Failed to create state file", e, metaData)
             }
         }
     }
@@ -52,27 +64,27 @@ class StateService(
         return isProcessing.get() > 0
     }
 
-    fun getLastKnownTimestamp(): Long {
-        return IdeMetaData.lastKnownTimestamp
+    fun getLastCheckPoint(): Long {
+        return metaData.lastCheckPoint
     }
 
     fun appendState(state: State) {
         if (isSyncing()) return
 
-        Logger.info("Appending state from ${state.source} with timestamp ${state.timestamp}")
+        Logger.info("Appending state from ${state.source} with timestamp ${state.timestamp}", metaData)
 
         try {
             // Check for conflict
-            val currentState = readStateFromFile()
-            if (currentState != null && currentState.timestamp > IdeMetaData.lastKnownTimestamp) {
-                Logger.info("Conflict detected. Local: ${IdeMetaData.lastKnownTimestamp}, Remote: ${currentState.timestamp}")
-                IdeMetaData.lastKnownTimestamp = currentState.timestamp
+            val (currentState, _) = readStateFromFile()
+            if (currentState != null && currentState.timestamp > metaData.lastCheckPoint) {
+                Logger.info("Conflict detected. Local: ${metaData.lastCheckPoint}, Remote: ${currentState.timestamp}", metaData)
+                metaData.lastCheckPoint = currentState.timestamp
                 onStateChanged(currentState)
                 return
             }
 
             val json = mapper.writeValueAsString(state)
-            Logger.info("State content: $json")
+            Logger.info("State content: $json", metaData)
             
             // Check truncation
             if (stateFile.length() > 1024 * 1024) { // 1MB
@@ -80,16 +92,16 @@ class StateService(
             } else {
                 stateFile.appendText("$json\n")
             }
-            IdeMetaData.lastKnownTimestamp = state.timestamp
+            metaData.lastCheckPoint = state.timestamp
         } catch (e: Exception) {
-            Logger.error("Failed to append state", e)
+            Logger.error("Failed to append state", e, metaData)
         }
     }
 
     private fun startWatching() {
         val thread = Thread {
             try {
-                val watchService = FileSystems.getDefault().newWatchService()
+                watchService = FileSystems.getDefault().newWatchService()
                 oneIdePath.register(
                     watchService, 
                     StandardWatchEventKinds.ENTRY_MODIFY,
@@ -97,7 +109,7 @@ class StateService(
                 )
 
                 while (isRunning.get()) {
-                    val key = watchService.take() // Blocks until event
+                    val key = watchService?.take() ?: break // Blocks until event
                     
                     for (event in key.pollEvents()) {
                         val kind = event.kind()
@@ -114,18 +126,22 @@ class StateService(
                     }
                 }
             } catch (e: Exception) {
-                Logger.error("Error watching state file", e)
+                Logger.error("Error watching state file", e, metaData)
             }
         }
         thread.isDaemon = true
         thread.start()
     }
 
-    private fun readStateFromFile(): State? {
-        if (!stateFile.exists()) return null
+    private fun readStateFromFile(): Pair<State?, Long> {
+        if (!stateFile.exists()) return null to 0L
+        
+        var maxTimestamp = 0L
+        var bestState: State? = null
+
         try {
             val lines = stateFile.readLines()
-            if (lines.isEmpty()) return null
+            if (lines.isEmpty()) return null to 0L
 
             val currentPath = getCurrentProjectPath()
             
@@ -137,35 +153,38 @@ class StateService(
                 try {
                     val state = mapper.readValue<State>(line)
                     
-                    if (state.timestamp <= IdeMetaData.lastKnownTimestamp) {
-                        return null
+                    if (state.timestamp > maxTimestamp) {
+                        maxTimestamp = state.timestamp
+                    }
+
+                    if (state.timestamp <= metaData.lastCheckPoint) {
+                        // Assuming append-only and ordered, we can stop if we reach old states
+                        break
                     }
                     
+                    // We only want the *latest* matching state. 
+                    // If we already found a bestState (which is newer because we iterate backwards), we skip checking older ones for match.
+                    if (bestState != null) continue
+
                     val rootPath = state.root.path
                     if (currentPath == null) {
-                        // If no current project path, we cannot verify path matching. 
-                        // However, to ensure we don't miss updates during initialization (when path might be null),
-                        // we might return the latest state. 
-                        // But given the strict requirements, if we can't match, we shouldn't return.
-                        // Wait, if init calls this and path is null, we get null. lastKnownTimestamp stays 0.
-                        // Then when path becomes available, we might process old events.
-                        // Let's assume path is available or we return latest if null to be safe?
-                        // User requirement: "find out last state that match any condition"
-                        // If currentPath is null, condition fails.
+                        Logger.info("Discard state: current project path is null. State root: $rootPath", metaData)
                         continue
                     }
 
                     if (rootPath == currentPath || rootPath.contains(currentPath) || currentPath.contains(rootPath)) {
-                        return state
+                        bestState = state
+                    } else {
+                        Logger.info("Discard state: path mismatch. State root: $rootPath, Current: $currentPath", metaData)
                     }
                 } catch (e: Exception) {
                     // Ignore parse error
                 }
             }
         } catch (e: Exception) {
-            Logger.error("Failed to parse state", e)
+            Logger.error("Failed to parse state", e, metaData)
         }
-        return null
+        return bestState to maxTimestamp
     }
 
     private fun readLatestState() {
@@ -173,13 +192,18 @@ class StateService(
             // Slight delay to ensure file write is complete (optional but helpful for some OS/FS)
              Thread.sleep(50)
              
-            val state = readStateFromFile()
-            if (state != null && state.timestamp > IdeMetaData.lastKnownTimestamp) {
-                IdeMetaData.lastKnownTimestamp = state.timestamp
+            val (state, maxTimestamp) = readStateFromFile()
+            
+            // Always update lastCheckPoint if we saw a newer timestamp
+            if (maxTimestamp > metaData.lastCheckPoint) {
+                metaData.lastCheckPoint = maxTimestamp
+            }
+
+            if (state != null) {
                 onStateChanged(state)
             }
         } catch (e: Exception) {
-            Logger.error("Failed to read state file", e)
+            Logger.error("Failed to read state file", e, metaData)
         }
     }
 }

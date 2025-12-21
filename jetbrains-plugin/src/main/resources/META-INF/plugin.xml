@@ -1,15 +1,23 @@
 <idea-plugin>
-    <id>com.oneide.plugin</id>
+    <id>com.itangcent.oneide</id>
     <name>One-IDE</name>
-    <vendor>OneIDE</vendor>
-    <description>Sync file operations between IDEs</description>
+    <vendor email="pentatangcent@gmail.com" url="https://github.com/tangcent/one-IDE">tangcent</vendor>
+    <description>
+        <![CDATA[
+        <p>One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools.</p>
+        <p>Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.</p>
+        ]]>
+    </description>
     <depends>com.intellij.modules.platform</depends>
     
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="com.oneide.OneIDEPlugin"/>
-        <statusBarWidgetFactory implementation="com.oneide.OneIDEStatusBarWidgetFactory"/>
-        <applicationService serviceImplementation="com.oneide.SyncService"/>
-        <applicationConfigurable instance="com.oneide.settings.OneIDESettingsConfigurable" displayName="One-IDE" />
+        <statusBarWidgetFactory id="OneIDEStatusBar" implementation="com.oneide.OneIDEStatusBarWidgetFactory"/>
+        <projectService serviceImplementation="com.oneide.models.IdeMetaData"/>
+        <projectService serviceImplementation="com.oneide.SyncService"/>
+        <applicationService serviceImplementation="com.oneide.services.AITool"/>
+        <projectConfigurable instance="com.oneide.settings.OneIDESettingsConfigurable" displayName="One-IDE" />
+        <notificationGroup id="OneIDE Notification Group" displayType="BALLOON"/>
     </extensions>
 
     <actions>

@@ -9,6 +9,7 @@ import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.oneide.models.Config
+import com.intellij.ide.util.PropertiesComponent
 import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.Path
@@ -23,6 +24,7 @@ class ConfigService(private val oneIdeDir: Path) {
 
     private var config: Config = Config()
     private val isRunning = AtomicBoolean(true)
+    private var watchService: java.nio.file.WatchService? = null
 
     init {
         initConfigFile()
@@ -30,12 +32,27 @@ class ConfigService(private val oneIdeDir: Path) {
         watchConfigFile()
     }
 
+    fun dispose() {
+        isRunning.set(false)
+        try {
+            watchService?.close()
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
     fun getConfig(): Config {
+        val properties = PropertiesComponent.getInstance()
+        config.syncRules = properties.getBoolean("com.oneide.ai.syncRules", true)
+        config.currentTool = properties.getValue("com.oneide.ai.currentTool", "Auto")
         return config
     }
 
     fun updateConfig(newConfig: Config) {
-        config = newConfig
+        // 1. Update Global Config (and save to file)
+        config.excludeFiles = newConfig.excludeFiles
+        config.excludeGitIgnore = newConfig.excludeGitIgnore
+        
         try {
             val application = ApplicationManager.getApplication()
             if (application != null) {
@@ -50,6 +67,15 @@ class ConfigService(private val oneIdeDir: Path) {
             // Handle case where ApplicationManager is not available
             saveConfig()
         }
+
+        // 2. Update Project Config (and save to PropertiesComponent)
+        val properties = PropertiesComponent.getInstance()
+        properties.setValue("com.oneide.ai.syncRules", newConfig.syncRules)
+        properties.setValue("com.oneide.ai.currentTool", newConfig.currentTool)
+        
+        // Update local memory copy
+        config.syncRules = newConfig.syncRules
+        config.currentTool = newConfig.currentTool
     }
 
     private fun saveConfig() {
@@ -71,6 +97,7 @@ class ConfigService(private val oneIdeDir: Path) {
 
     private fun initConfigFile() {
         if (!configFile.exists()) {
+            configFile.parentFile?.mkdirs()
             val defaultConfig = Config(excludeFiles = emptyList(), excludeGitIgnore = false)
             try {
                 configFile.writeText(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(defaultConfig))
@@ -107,7 +134,7 @@ class ConfigService(private val oneIdeDir: Path) {
     private fun watchConfigFile() {
         val thread = Thread {
             try {
-                val watchService = FileSystems.getDefault().newWatchService()
+                watchService = FileSystems.getDefault().newWatchService()
                 oneIdeDir.register(
                     watchService,
                     StandardWatchEventKinds.ENTRY_MODIFY,
@@ -115,7 +142,7 @@ class ConfigService(private val oneIdeDir: Path) {
                 )
 
                 while (isRunning.get()) {
-                    val key = watchService.take() // Blocks until event
+                    val key = watchService?.take() ?: break // Blocks until event
                     for (event in key.pollEvents()) {
                         val kind = event.kind()
                         if (kind == StandardWatchEventKinds.OVERFLOW) continue

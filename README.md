@@ -1,10 +1,13 @@
 # One-IDE
 
-One-IDE is a synchronization tool that allows you to use multiple IDEs (JetBrains IntelliJ-based IDEs and VS Code) as if they were a single unified environment.
+One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools. 
+ 
+ Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.
 
 ## Features
 
 - **Cross-IDE Synchronization**: Syncs active file and cursor position between VS Code and JetBrains IDEs.
+- **AI Project Rules Synchronization**: Automatically detects and syncs AI project rules (e.g., `.cursorrules`, `.trae/rules`) between different AI coding tools.
 
 ## Architecture
 
@@ -14,6 +17,22 @@ The system consists of two plugins:
 2. **JetBrains Plugin**: Performs the same role for IntelliJ IDEA, WebStorm, etc.
 
 Both plugins share the `~/.one-ide` directory for storing the logs and configuration.
+
+## AI Rules Sync
+
+The plugin monitors project-specific AI rule files. If it detects changes in rules for a supported AI tool (e.g., Cursor, Windsurf) and you are currently running a different tool (e.g., Trae), it will attempt to sync the rules to your current tool's configuration format.
+
+Supported AI Tools:
+
+- Cursor (`.cursorrules`, `.cursor/rules`)
+- Trae (`.trae/rules`)
+- Windsurf (`.windsurfrules`, `.windsurf/rules`)
+- GitHub Copilot (`.github/copilot-instructions.md`)
+- Claude (`.claude/rules`, `.claude.json`)
+- JetBrains AI Assistant (`.aiassistant/rules`)
+- Junie (`.junie`)
+- Qodo (`.codiumai.toml`, `.codiumai.yaml`)
+- Qoder (`.qoder`)
 
 ## Installation
 
@@ -40,19 +59,3 @@ cd jetbrains-plugin
 ```
 
 The plugin archive will be generated in `jetbrains-plugin/build/distributions`. Install it in your JetBrains IDE via "Install Plugin from Disk".
-
-## Configuration
-
-The configuration file is located at `~/.one-ide/config.json`. It is created automatically on first run.
-
-Default configuration:
-
-```json
-{
-  "excludeFiles": [],
-  "excludeGitIgnore": true
-}
-```
-
-- `excludeFiles`: Array of file names or patterns (e.g., `["*.log", "dist"]`) to ignore.
-- `excludeGitIgnore`: If `true`, ignores files that are inside `.git` directories.

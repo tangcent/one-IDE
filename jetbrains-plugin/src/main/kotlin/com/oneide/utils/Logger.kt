@@ -42,10 +42,14 @@ object Logger {
         }
     }
 
-    private fun writeToFile(level: String, message: String) {
+    private fun writeToFile(level: String, message: String, metaData: IdeMetaData? = null) {
         try {
             val timestamp = LocalDateTime.now().format(dateFormatter)
-            val metaStr = "${IdeMetaData.ide}-${IdeMetaData.id}"
+            val metaStr = if (metaData != null) {
+                "${metaData.ide}-${metaData.id}"
+            } else {
+                "Unknown"
+            }
             val line = "[$timestamp] [$level] [$metaStr] $message\n"
             logFile.appendText(line)
         } catch (e: Exception) {
@@ -53,18 +57,18 @@ object Logger {
         }
     }
 
-    fun info(message: String) {
+    fun info(message: String, metaData: IdeMetaData? = null) {
         ideaLogger.info(message)
-        writeToFile("INFO", message)
+        writeToFile("INFO", message, metaData)
     }
 
-    fun error(message: String, e: Throwable? = null) {
+    fun error(message: String, e: Throwable? = null, metaData: IdeMetaData? = null) {
         if (e != null) {
             ideaLogger.error(message, e)
-            writeToFile("ERROR", "$message\n${e.stackTraceToString()}")
+            writeToFile("ERROR", "$message\n${e.stackTraceToString()}", metaData)
         } else {
             ideaLogger.error(message)
-            writeToFile("ERROR", message)
+            writeToFile("ERROR", message, metaData)
         }
     }
 }

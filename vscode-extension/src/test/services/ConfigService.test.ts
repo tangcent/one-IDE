@@ -18,7 +18,9 @@ describe('ConfigService', () => {
         
         mockConfig = {
             excludeFiles: [],
-            excludeGitIgnore: false
+            excludeGitIgnore: false,
+            'ai.syncRules': true,
+            'ai.currentTool': 'Auto'
         };
 
         // Setup default mock behavior
@@ -33,11 +35,19 @@ describe('ConfigService', () => {
             if (section === 'oneIde') {
                 return {
                     get: (key: string, defaultValue: any) => {
-                        return mockConfig[key] !== undefined ? mockConfig[key] : defaultValue;
+                        // Handle both nested and direct keys for simplicity in mock
+                        const fullKey = key.includes('.') ? key : `ai.${key}`;
+                        if (mockConfig[key] !== undefined) return mockConfig[key];
+                        if (mockConfig[fullKey] !== undefined) return mockConfig[fullKey];
+                        return defaultValue;
+                    },
+                    update: (key: string, value: any, target: any) => {
+                        mockConfig[key] = value;
+                        return Promise.resolve();
                     }
                 };
             }
-            return { get: () => undefined };
+            return { get: () => undefined, update: () => Promise.resolve() };
         };
 
         (vscode.workspace as any).onDidChangeConfiguration = (cb: any) => {
@@ -57,12 +67,22 @@ describe('ConfigService', () => {
 
     it('should load default config', () => {
         const config = (service as any).config; // access private
-        assert.deepStrictEqual(config, { excludeFiles: [], excludeGitIgnore: false });
+        assert.deepStrictEqual(config, { 
+            excludeFiles: [], 
+            excludeGitIgnore: false,
+            syncRules: true,
+            currentTool: 'Auto'
+        });
     });
 
     it('should exclude files by pattern', () => {
-        // Update config
-        mockConfig.excludeFiles = ['*.log', 'node_modules'];
+        // Write global config
+        const configFile = path.join(oneIdeDir, 'config.json');
+        fs.mkdirSync(oneIdeDir, { recursive: true });
+        fs.writeFileSync(configFile, JSON.stringify({
+            excludeFiles: ['*.log', 'node_modules'],
+            excludeGitIgnore: false
+        }));
         
         // Trigger reload manually
         (service as any).loadConfig();
@@ -76,8 +96,14 @@ describe('ConfigService', () => {
         // Create .gitignore
         fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'ignored.txt\nbuild/');
         
-        // Update config
-        mockConfig.excludeGitIgnore = true;
+        // Write global config
+        const configFile = path.join(oneIdeDir, 'config.json');
+        fs.mkdirSync(oneIdeDir, { recursive: true });
+        fs.writeFileSync(configFile, JSON.stringify({
+            excludeFiles: [],
+            excludeGitIgnore: true
+        }));
+
         (service as any).loadConfig();
 
         // Check ignored file
@@ -94,11 +120,14 @@ describe('ConfigService', () => {
     });
 
     it('should save config to disk when changed', () => {
-        // Trigger configuration change event
-        mockConfig.excludeFiles = ['*.tmp'];
+        const newConfig = {
+            excludeFiles: ['*.tmp'],
+            excludeGitIgnore: false,
+            syncRules: true,
+            currentTool: 'Auto'
+        };
         
-        // Simulate VS Code event
-        configChangeCallback({ affectsConfiguration: (s: string) => s === 'oneIde' });
+        service.updateConfig(newConfig);
 
         // Check file existence
         const configFile = path.join(oneIdeDir, 'config.json');
@@ -110,5 +139,8 @@ describe('ConfigService', () => {
             excludeFiles: ['*.tmp'],
             excludeGitIgnore: false
         });
+        
+        // Check project config updated (mock)
+        assert.strictEqual(mockConfig['ai.syncRules'], true);
     });
 });

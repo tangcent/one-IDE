@@ -1,0 +1,67 @@
+{
+    "tools": [
+        {
+            "name": "Cursor",
+            "patterns": [".cursorrules", ".cursor/rules/**/*"],
+            "ruleRoot": ".cursor/rules",
+            "strategy": "folder",
+            "plugins": []
+        },
+        {
+            "name": "Trae",
+            "patterns": [".trae/rules/**/*"],
+            "ruleRoot": ".trae/rules",
+            "strategy": "folder",
+            "plugins": ["MarsCode.marscode-extension"]
+        },
+        {
+            "name": "Windsurf",
+            "patterns": [".windsurfrules", ".windsurf/rules/**/*"],
+            "ruleRoot": ".windsurf/rules",
+            "strategy": "folder",
+            "plugins": ["Codeium.codeium"]
+        },
+        {
+            "name": "Claude",
+            "patterns": [".claude/rules/**/*", ".claude.json"],
+            "ruleRoot": ".claude/rules",
+            "strategy": "folder",
+            "plugins": ["anthropic.claude-code"]
+        },
+        {
+            "name": "Copilot",
+            "patterns": [".github/copilot-instructions.md"],
+            "ruleRoot": ".github/copilot-instructions.md",
+            "strategy": "single-file",
+            "plugins": ["GitHub.copilot"]
+        },
+        {
+            "name": "qoder",
+            "patterns": [".qoder/**/*"],
+            "ruleRoot": ".qoder",
+            "strategy": "folder",
+            "plugins": []
+        },
+        {
+            "name": "JetBrains",
+            "patterns": [".aiassistant/rules/**/*"],
+            "ruleRoot": ".aiassistant/rules",
+            "strategy": "folder",
+            "plugins": ["JetBrains.jetbrains-ai-assistant"]
+        },
+        {
+            "name": "junie",
+            "patterns": [".junie/**/*"],
+            "ruleRoot": ".junie",
+            "strategy": "folder",
+            "plugins": []
+        },
+        {
+            "name": "Qodo",
+            "patterns": [".codiumai.toml", ".codiumai.yaml"],
+            "ruleRoot": ".codiumai.toml",
+            "strategy": "single-file",
+            "plugins": ["Codium.codium"]
+        }
+    ]
+}

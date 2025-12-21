@@ -1,0 +1,105 @@
+{
+    "tools": [
+        {
+            "name": "Cursor",
+            "patterns": [
+                ".cursorrules",
+                ".cursor/rules/**/*"
+            ],
+            "ruleRoot": ".cursor/rules",
+            "strategy": "folder",
+            "plugins": []
+        },
+        {
+            "name": "Trae",
+            "patterns": [
+                ".trae/rules/**/*"
+            ],
+            "ruleRoot": ".trae/rules",
+            "strategy": "folder",
+            "plugins": [
+                "com.marscode"
+            ]
+        },
+        {
+            "name": "Windsurf",
+            "patterns": [
+                ".windsurfrules",
+                ".windsurf/rules/**/*"
+            ],
+            "ruleRoot": ".windsurf/rules",
+            "strategy": "folder",
+            "plugins": [
+                "com.codeium.intellij"
+            ]
+        },
+        {
+            "name": "Claude",
+            "patterns": [
+                ".claude/rules/**/*",
+                ".claude.json"
+            ],
+            "ruleRoot": ".claude/rules",
+            "strategy": "folder",
+            "plugins": [
+                "com.anthropic.code.plugin"
+            ]
+        },
+        {
+            "name": "Copilot",
+            "patterns": [
+                ".github/copilot-instructions.md"
+            ],
+            "ruleRoot": ".github/copilot-instructions.md",
+            "strategy": "single-file",
+            "plugins": [
+                "com.github.copilot"
+            ]
+        },
+        {
+            "name": "JetBrains",
+            "patterns": [
+                ".aiassistant/rules/**/*"
+            ],
+            "ruleRoot": ".aiassistant/rules",
+            "strategy": "folder",
+            "plugins": [
+                "com.intellij.ml.llm"
+            ]
+        },
+        {
+            "name": "junie",
+            "patterns": [
+                ".junie/**/*"
+            ],
+            "ruleRoot": ".junie",
+            "strategy": "folder",
+            "plugins": [
+                "org.jetbrains.junie"
+            ]
+        },
+        {
+            "name": "Qodo",
+            "patterns": [
+                ".codiumai.toml",
+                ".codiumai.yaml"
+            ],
+            "ruleRoot": ".codiumai.toml",
+            "strategy": "single-file",
+            "plugins": [
+                "codiumai.codiumai"
+            ]
+        },
+        {
+            "name": "qoder",
+            "patterns": [
+                ".qoder/**/*"
+            ],
+            "ruleRoot": ".qoder",
+            "strategy": "folder",
+            "plugins": [
+                "com.qoder"
+            ]
+        }
+    ]
+}

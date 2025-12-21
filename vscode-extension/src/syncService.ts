@@ -11,7 +11,7 @@ import { Debouncer } from './utils/Debouncer';
 
 const ONE_IDE_DIR = path.join(os.homedir(), '.one-ide');
 
-export class SyncService {
+export class SyncService implements vscode.Disposable {
     private sourceId: string;
     private isEnabled: boolean = true;
     private statusBarItem: vscode.StatusBarItem;
@@ -25,7 +25,9 @@ export class SyncService {
     private postDebouncer = new Debouncer(300);
     private applyDebouncer = new Debouncer(300);
 
-    constructor() {
+    private disposables: vscode.Disposable[] = [];
+
+    constructor(configService: ConfigService) {
         const meta = IdeMetaData.getInstance();
         this.sourceId = meta.id;
         Logger.setMetaData(meta);
@@ -33,7 +35,7 @@ export class SyncService {
 
         try {
             this.ensureOneIdeDir();
-            this.configService = new ConfigService();
+            this.configService = configService;
             this.stateService = new StateService(
                 ONE_IDE_DIR, 
                 this.handleStateChange.bind(this),
@@ -80,13 +82,14 @@ export class SyncService {
     }
 
     private watchEditor() {
-        vscode.workspace.onDidChangeTextDocument(() => { /* Content change, maybe ignore */ });
-
-        vscode.window.onDidChangeActiveTextEditor(() => this.triggerUpdate());
-        vscode.window.onDidChangeTextEditorSelection(() => this.triggerUpdate(true)); // specific debounce for cursor?
-        vscode.window.onDidChangeVisibleTextEditors(() => this.triggerUpdate());
-        vscode.workspace.onDidOpenTextDocument(() => this.triggerUpdate());
-        vscode.workspace.onDidCloseTextDocument(() => this.triggerUpdate());
+        this.disposables.push(
+            vscode.workspace.onDidChangeTextDocument(() => { /* Content change, maybe ignore */ }),
+            vscode.window.onDidChangeActiveTextEditor(() => this.triggerUpdate()),
+            vscode.window.onDidChangeTextEditorSelection(() => this.triggerUpdate(true)),
+            vscode.window.onDidChangeVisibleTextEditors(() => this.triggerUpdate()),
+            vscode.workspace.onDidOpenTextDocument(() => this.triggerUpdate()),
+            vscode.workspace.onDidCloseTextDocument(() => this.triggerUpdate())
+        );
     }
 
     private triggerUpdate(isCursor: boolean = false) {
@@ -96,7 +99,7 @@ export class SyncService {
         // If window is not focused, and the last sync (from others) was less than 5s ago,
         // we assume this event is a delayed echo or side-effect of the sync, so we ignore it.
         if (!vscode.window.state.focused) {
-            const timeSinceLastSync = Date.now() - this.stateService.getLastKnownTimestamp();
+            const timeSinceLastSync = Date.now() - this.stateService.getLastCheckPoint();
             if (timeSinceLastSync < 5000) {
                 // Logger.log(`Ignoring background event (Last sync: ${timeSinceLastSync}ms ago)`);
                 return;
@@ -379,9 +382,12 @@ export class SyncService {
     }
 
     public dispose() {
+        this.isEnabled = false;
         this.statusBarItem.dispose();
-        if (this.configService) {
-            this.configService.dispose();
-        }
+        this.postDebouncer.cancel();
+        this.applyDebouncer.cancel();
+        this.disposables.forEach(d => d.dispose());
+        this.disposables = [];
+        this.stateService.dispose();
     }
 }
