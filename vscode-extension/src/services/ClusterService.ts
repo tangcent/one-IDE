@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
 import { State, NodeInfo, CandidatesData } from '../types';
 import { Logger } from '../logger';
 import { IdeConnector } from './IdeConnector';
@@ -10,6 +9,8 @@ import { IRole } from './cluster/roles/BaseRole';
 import { Follower } from './cluster/roles/Follower';
 import { Candidate } from './cluster/roles/Candidate';
 import { Leader } from './cluster/roles/Leader';
+import { IdeMetaData } from '../IdeMetaData';
+import { ClusterConstants } from './cluster/ClusterConstants';
 
 export enum RoleType {
     LEADER = 'LEADER',
@@ -34,6 +35,7 @@ export class ClusterService {
     private clusterDir: string;
     private nodesDir: string;
     private nodeId: string;
+    private myNodeDir!: string;
     
     private currentRole: IRole | null = null;
     private roleType: RoleType = RoleType.FOLLOWER;
@@ -56,7 +58,7 @@ export class ClusterService {
             fs.mkdirSync(this.clusterDir, { recursive: true });
         }
         
-        this.nodeId = this.getOrGenerateNodeId();
+        this.nodeId = IdeMetaData.getInstance().id;
         const nodeDir = path.join(this.nodesDir, this.nodeId);
         if (!fs.existsSync(nodeDir)) {
             fs.mkdirSync(nodeDir, { recursive: true });
@@ -159,7 +161,7 @@ export class ClusterService {
         try {
             const content = fs.readFileSync(this.leaderFile, 'utf-8');
             const info = JSON.parse(content) as NodeInfo;
-            if (Date.now() - info.timestamp > 3000) {
+            if (Date.now() - info.timestamp > ClusterConstants.LEADER_TIMEOUT) {
                 return false;
             }
             return true;
@@ -196,22 +198,12 @@ export class ClusterService {
 
     // --- Internal ---
 
-    private getOrGenerateNodeId(): string {
-        const idFile = path.join(this.oneIdeDir, 'node_id');
-        if (fs.existsSync(idFile)) {
-            return fs.readFileSync(idFile, 'utf-8').trim();
-        }
-        const id = uuidv4();
-        fs.writeFileSync(idFile, id);
-        return id;
-    }
-
     private startHeartbeat() {
         this.heartbeatInterval = setInterval(async () => {
             if (this.currentRole) {
                 await this.currentRole.onHeartbeat();
             }
-        }, 1000);
+        }, ClusterConstants.HEARTBEAT_INTERVAL);
     }
 
     private acquireLock(lockDir: string): boolean {
@@ -221,7 +213,7 @@ export class ClusterService {
         } catch (e) {
             try {
                 const stats = fs.statSync(lockDir);
-                if (Date.now() - stats.mtimeMs > 5000) {
+                if (Date.now() - stats.mtimeMs > ClusterConstants.LOCK_STALE_TIMEOUT) {
                     try {
                         fs.rmdirSync(lockDir);
                         fs.mkdirSync(lockDir);
@@ -247,6 +239,15 @@ export class ClusterService {
         if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
         if (this.currentRole) {
             this.currentRole.dispose();
+        }
+        
+        // Cleanup my node directory
+        try {
+            if (fs.existsSync(this.myNodeDir)) {
+                fs.rmSync(this.myNodeDir, { recursive: true, force: true });
+            }
+        } catch (e) {
+            Logger.error('Failed to cleanup node directory', e);
         }
     }
 }

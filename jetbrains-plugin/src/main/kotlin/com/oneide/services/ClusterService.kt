@@ -5,6 +5,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.intellij.openapi.project.Project
 import com.oneide.models.*
 import com.oneide.services.cluster.roles.*
+import com.oneide.services.cluster.ClusterConstants
 import com.oneide.utils.Logger
 import java.io.File
 import java.util.concurrent.Executors
@@ -111,7 +112,7 @@ class ClusterService(
             } catch (e: Exception) {
                 // ignore
             }
-        }, 0, 1, TimeUnit.SECONDS)
+        }, 0, ClusterConstants.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS)
     }
 
     fun updateNodeHeartbeat() {
@@ -135,7 +136,7 @@ class ClusterService(
         if (!leaderFile.exists()) return false
         return try {
             val info: NodeInfo = mapper.readValue(leaderFile)
-            System.currentTimeMillis() - info.timestamp <= 3000
+            System.currentTimeMillis() - info.timestamp <= ClusterConstants.LEADER_TIMEOUT
         } catch (_: Exception) {
             false
         }
@@ -171,7 +172,7 @@ class ClusterService(
             return lockDir.mkdir()
         } catch (e: Exception) {
             try {
-                if (System.currentTimeMillis() - lockDir.lastModified() > 5000) {
+                if (System.currentTimeMillis() - lockDir.lastModified() > ClusterConstants.LOCK_STALE_TIMEOUT) {
                     lockDir.delete()
                     return lockDir.mkdir()
                 }

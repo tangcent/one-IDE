@@ -39,7 +39,10 @@ class Follower(cluster: ClusterService) : BaseRole(cluster) {
 
     override fun onUserActivity() {
         if (!cluster.checkLeaderHealth()) {
-            Logger.info("User activity detected on Follower and Leader unhealthy -> Switching to Candidate", IdeMetaData.getInstance(cluster.project))
+            Logger.info(
+                "User activity detected on Follower and Leader unhealthy -> Switching to Candidate",
+                IdeMetaData.getInstance(cluster.project)
+            )
             cluster.becomeCandidate()
         }
     }
@@ -63,6 +66,7 @@ class Candidate(cluster: ClusterService) : BaseRole(cluster) {
 
     private fun tryElection() {
         if (!cluster.getIdeConnector().isWindowFocused()) {
+            cluster.becomeFollower()
             return
         }
 
@@ -94,7 +98,10 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
     override fun onHeartbeat() {
         super.onHeartbeat()
         if (!cluster.checkIfLeaderIsMe()) {
-            Logger.info("Leader: Found another leader or leader file missing, downgrading to Follower", IdeMetaData.getInstance(cluster.project))
+            Logger.info(
+                "Leader: Found another leader or leader file missing, downgrading to Follower",
+                IdeMetaData.getInstance(cluster.project)
+            )
             cluster.becomeFollower()
         }
     }
@@ -102,7 +109,7 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
     private fun publishCurrentState() {
         val connector = cluster.getIdeConnector()
         val state = connector.captureState()
-        
+
         if (state != lastState) {
             Logger.info("State changed, publishing new state", IdeMetaData.getInstance(cluster.project))
             cluster.getStateService().publishState(state, cluster.getNodeId())

@@ -41,7 +41,7 @@ export class IdeConnector {
 
     private triggerActivity() {
         if (this.isApplyingState) return;
-        
+
         if (this.onUserActivityCallback) {
             this.onUserActivityCallback();
         }
@@ -136,16 +136,19 @@ export class IdeConnector {
             let activeFileToSet: string | undefined;
             const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             const normalizedRoot = rootPath ? path.resolve(rootPath) : undefined;
+            if (!normalizedRoot) {
+                Logger.log(`Skipping apply state: No workspace folder found`);
+                return;
+            }
+
             const stateRoot = path.resolve(state.root.path);
 
             // 2. Check intersection
-            if (normalizedRoot) {
-                const normalizedStateRoot = path.resolve(stateRoot);
-                const hasIntersection = normalizedRoot.startsWith(normalizedStateRoot) || normalizedStateRoot.startsWith(normalizedRoot);
-                if (!hasIntersection) {
-                    Logger.log(`Skipping apply state: Project path ${normalizedRoot} has no intersection with state root ${normalizedStateRoot}`);
-                    return;
-                }
+            const normalizedStateRoot = path.resolve(stateRoot);
+            const hasIntersection = normalizedRoot.startsWith(normalizedStateRoot) || normalizedStateRoot.startsWith(normalizedRoot);
+            if (!hasIntersection) {
+                Logger.log(`Skipping apply state: Project path ${normalizedRoot} has no intersection with state root ${normalizedStateRoot}`);
+                return;
             }
 
             const traverse = (node: FolderState) => {
@@ -205,8 +208,9 @@ export class IdeConnector {
                     // 1. Open if need open
                     let editor = this.getTextEditor(fsPath);
                     const isActive = vscode.window.activeTextEditor?.document.uri.fsPath === fsPath;
+                    const isOpened = currentFiles.has(fsPath);
 
-                    if (!editor || (fileState.isActive && !isActive)) {
+                    if ((!isOpened && !editor) || (fileState.isActive && !isActive)) {
                         Logger.log(`Opening/Updating file: ${fsPath}`);
                         const doc = await vscode.workspace.openTextDocument(uri);
                         editor = await vscode.window.showTextDocument(doc, {

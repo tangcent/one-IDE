@@ -161,12 +161,12 @@ class IdeConnector(private val project: Project, private val configService: Conf
             try {
                 if (project.isDisposed) return@invokeLater
 
-                val projectPath = project.basePath?.let { Paths.get(it).toAbsolutePath().normalize() }
+                val basePath = project.basePath ?: return@invokeLater
+                val projectPath = Paths.get(basePath).toAbsolutePath().normalize()
 
                 // 2. Check intersection
                 val stateRoot = Paths.get(state.root.path).toAbsolutePath().normalize()
-                val hasIntersection =
-                    projectPath != null && (projectPath.startsWith(stateRoot) || stateRoot.startsWith(projectPath))
+                val hasIntersection = projectPath.startsWith(stateRoot) || stateRoot.startsWith(projectPath)
 
                 if (!hasIntersection) {
                     Logger.info(
@@ -186,7 +186,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         node.openedFiles.filter { fs ->
                             try {
                                 val fPath = Paths.get(fs.filePath).toAbsolutePath().normalize()
-                                fPath.startsWith(projectPath) || projectPath.startsWith(fPath)
+                                fPath.startsWith(projectPath)
                             } catch (_: Exception) {
                                 false
                             }
@@ -206,7 +206,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         try {
                             val fPath = Paths.get(file.path).toAbsolutePath().normalize()
                             if (!fPath.startsWith(projectPath)) continue
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             continue
                         }
                     }
