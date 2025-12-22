@@ -15,5 +15,8 @@ export const window = {
     showErrorMessage: () => {},
     showInformationMessage: () => {}
 };
+export const env = {
+    appName: 'VSCode'
+};
 export enum StatusBarAlignment { Left, Right }
 export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }

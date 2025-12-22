@@ -1,184 +1,74 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { State, FolderState, FileState } from '../types';
+import { State, ClusterState } from '../types';
 import { Logger } from '../logger';
 import { IdeMetaData } from '../IdeMetaData';
 
+/**
+ * Handles the serialization, publication, and observation of IDE state.
+ * 
+ * The state is exchanged via a shared JSON file (~/.one-ide/cluster/state.json).
+ * - The LEADER writes to this file when the user's context (open files, cursor) changes.
+ * - FOLLOWERS watch this file for changes and apply the new state.
+ */
 export class StateService {
     private stateFile: string;
-    private processingCount: number = 0;
-    private onStateChanged: (state: State) => void;
-    private lastFileSize: number = 0;
+    private onStateReceivedCallback: ((state: State) => void) | null = null;
     private watcher: fs.FSWatcher | null = null;
+    private lastStateTimestamp = 0;
 
-    constructor(
-        oneIdeDir: string, 
-        onStateChanged: (state: State) => void,
-        private getCurrentProjectPath: () => string | undefined
-    ) {
-        this.stateFile = path.join(oneIdeDir, 'state.json');
-        this.onStateChanged = onStateChanged;
-        this.init();
+    constructor(oneIdeDir: string) {
+        this.stateFile = path.join(oneIdeDir, 'cluster', 'state.json');
     }
 
-    public dispose() {
-        if (this.watcher) {
-            this.watcher.close();
-            this.watcher = null;
-        }
+    public setOnStateReceived(callback: (state: State) => void) {
+        this.onStateReceivedCallback = callback;
     }
 
-    private init() {
-        if (!fs.existsSync(this.stateFile)) {
-            // Optional: Create if not exists, or just wait for write
-        } else {
-            this.lastFileSize = fs.statSync(this.stateFile).size;
-            this.readLatestState();
-        }
-        this.watchStateFile();
-    }
+    public async publishState(state: State, leaderId: string) {
+        Logger.log(`Publishing state from ${state.source} with timestamp ${state.timestamp}`);
 
-    public startSync() {
-        this.processingCount++;
-    }
-
-    public endSync() {
-        this.processingCount = Math.max(0, this.processingCount - 1);
-    }
-
-    public isSyncing(): boolean {
-        return this.processingCount > 0;
-    }
-
-    public getLastCheckPoint(): number {
-        return IdeMetaData.getInstance().lastCheckPoint;
-    }
-
-    /**
-     * Reads state file and returns [BestMatchingState, MaxTimestamp]
-     */
-    private readStateFromFile(): [State | null, number] {
-        if (!fs.existsSync(this.stateFile)) return [null, 0];
-        try {
-            const content = fs.readFileSync(this.stateFile, 'utf-8');
-            const lines = content.trim().split('\n');
-            if (lines.length === 0) return [null, 0];
-
-            const currentPath = this.getCurrentProjectPath();
-            const meta = IdeMetaData.getInstance();
-            let maxTimestamp = 0;
-            let bestState: State | null = null;
-
-            for (let i = lines.length - 1; i >= 0; i--) {
-                const line = lines[i].trim();
-                if (!line) continue;
-
-                try {
-                    const state = JSON.parse(line) as State;
-                    
-                    if (state.timestamp > maxTimestamp) {
-                        maxTimestamp = state.timestamp;
-                    }
-
-                    if (state.timestamp <= meta.lastCheckPoint) {
-                        break;
-                    }
-                    
-                    if (bestState) continue;
-
-                    if (currentPath) {
-                        const rootPath = state.root.path;
-                        if (rootPath === currentPath || rootPath.includes(currentPath) || currentPath.includes(rootPath)) {
-                            bestState = state;
-                        } else {
-                            Logger.log(`Discard state: path mismatch. State root: ${rootPath}, Current: ${currentPath}`);
-                        }
-                    } else {
-                        Logger.log(`Discard state: current project path is undefined. State root: ${state.root.path}`);
-                        // continue;
-                    }
-                } catch (e) {
-                    // ignore
-                }
-            }
-            return [bestState, maxTimestamp];
-        } catch (e) {
-            Logger.error('Failed to read state file:', e);
-        }
-        return [null, 0];
-    }
-
-    public appendState(state: State) {
-        if (this.isSyncing()) {
-            return
-        }
-        
-        Logger.log(`Appending state from ${state.source} with timestamp ${state.timestamp}`);
-        Logger.log(`State content: ${JSON.stringify(state)}`);
+        const clusterState: ClusterState = {
+            timestamp: Date.now(),
+            leaderId: leaderId,
+            state: state
+        };
 
         try {
-            // Conflict Check
-            const [currentState, _] = this.readStateFromFile();
-            const meta = IdeMetaData.getInstance();
-            if (currentState && currentState.timestamp > meta.lastCheckPoint) {
-                Logger.log(`Conflict detected. Local: ${meta.lastCheckPoint}, Remote: ${currentState.timestamp}`);
-                meta.lastCheckPoint = currentState.timestamp;
-                this.onStateChanged(currentState);
-                return;
-            }
-
-            const replacer = (key: string, value: any) => {
-                if (value === null) return undefined;
-                if (value === false) return undefined;
-                // Don't strip empty arrays, they are needed for structure
-                return value;
-            };
-
-            const line = JSON.stringify(state, replacer) + '\n';
+            const dir = path.dirname(this.stateFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             
-            // Check file size for truncation (1MB limit)
-            let shouldTruncate = false;
-            try {
-                if (fs.existsSync(this.stateFile)) {
-                    const stats = fs.statSync(this.stateFile);
-                    if (stats.size > 1024 * 1024) {
-                        shouldTruncate = true;
-                    }
-                }
-            } catch (e) {
-                // Ignore stat error
-            }
-
-            if (shouldTruncate) {
-                fs.writeFileSync(this.stateFile, line);
-                this.lastFileSize = line.length;
-            } else {
-                fs.appendFileSync(this.stateFile, line);
-                this.lastFileSize += line.length;
-            }
-            meta.lastCheckPoint = state.timestamp;
+            fs.writeFileSync(this.stateFile, JSON.stringify(clusterState, null, 2));
+            IdeMetaData.getInstance().lastCheckPoint = state.timestamp;
         } catch (e) {
-            Logger.error('Failed to append state:', e);
+            Logger.error('Failed to publish state', e);
         }
     }
 
-    private watchStateFile() {
-        Logger.log(`Watching state file: ${this.stateFile}`);
-        const dir = path.dirname(this.stateFile);
+    public startWatching() {
+        if (this.watcher) return;
         
-        let fsWait: NodeJS.Timeout | null = null;
+        const dir = path.dirname(this.stateFile);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        Logger.log(`Watching state file: ${this.stateFile}`);
         try {
             this.watcher = fs.watch(dir, (eventType, filename) => {
                 if (filename === 'state.json') {
-                    if (fsWait) return;
-                    fsWait = setTimeout(() => {
-                        fsWait = null;
-                        this.readLatestState();
-                    }, 100);
+                    this.readLatestState();
                 }
             });
+            // Initial read
+            this.readLatestState();
         } catch (e) {
-            Logger.error('Failed to watch directory:', e);
+            Logger.error('Failed to watch state file', e);
+        }
+    }
+
+    public stopWatching() {
+        if (this.watcher) {
+            this.watcher.close();
+            this.watcher = null;
         }
     }
 
@@ -186,18 +76,22 @@ export class StateService {
         if (!fs.existsSync(this.stateFile)) return;
 
         try {
-            const [state, maxTimestamp] = this.readStateFromFile();
+            const content = fs.readFileSync(this.stateFile, 'utf-8');
+            const clusterState = JSON.parse(content) as ClusterState;
             const meta = IdeMetaData.getInstance();
-            
-            if (maxTimestamp > meta.lastCheckPoint) {
-                meta.lastCheckPoint = maxTimestamp;
-            }
 
-            if (state) {
-                this.onStateChanged(state);
+            if (clusterState.timestamp > meta.lastCheckPoint) {
+                meta.lastCheckPoint = clusterState.timestamp;
+                if (this.onStateReceivedCallback) {
+                    this.onStateReceivedCallback(clusterState.state);
+                }
             }
         } catch (e) {
-            Logger.error('Failed to read state file:', e);
+            Logger.log('Error reading state file: ' + e);
         }
+    }
+
+    public dispose() {
+        this.stopWatching();
     }
 }

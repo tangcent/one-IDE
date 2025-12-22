@@ -25,3 +25,26 @@ data class State(
     val ide: String = "",
     val root: FolderState = FolderState()
 )
+
+enum class Role {
+    LEADER, FOLLOWER, CANDIDATE
+}
+
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
+data class NodeInfo(
+    val id: String = "",
+    val timestamp: Long = 0,
+    val lastHeartbeat: Long = 0
+)
+
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
+data class ClusterState(
+    val timestamp: Long = 0,
+    val leaderId: String = "",
+    val state: State = State()
+)
+
+@JsonInclude(JsonInclude.Include.NON_DEFAULT)
+data class CandidatesData(
+    val candidates: MutableList<NodeInfo> = mutableListOf()
+)

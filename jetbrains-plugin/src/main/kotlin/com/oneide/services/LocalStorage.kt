@@ -1,12 +1,13 @@
 package com.oneide.services
 
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
 import com.google.gson.reflect.TypeToken
-import com.oneide.utils.Logger
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import java.io.File
 import java.io.RandomAccessFile
-import java.nio.channels.FileChannel
-import java.nio.channels.OverlappingFileLockException
 
 object LocalStorage {
     private var testFile: File? = null
@@ -24,7 +25,50 @@ object LocalStorage {
             return File(dir, "local-storage.json")
         }
 
-    private val gson = Gson()
+    private val gson = GsonBuilder()
+        .registerTypeAdapter(Long::class.java, object : TypeAdapter<Long>() {
+            override fun write(out: JsonWriter, value: Long?) {
+                if (value == null) {
+                    out.nullValue()
+                } else {
+                    out.value(value)
+                }
+            }
+
+            override fun read(`in`: JsonReader): Long? {
+                if (`in`.peek() == JsonToken.NULL) {
+                    `in`.nextNull()
+                    return null
+                }
+                return try {
+                    `in`.nextLong()
+                } catch (e: Exception) {
+                    `in`.nextDouble().toLong()
+                }
+            }
+        })
+        .registerTypeAdapter(Long::class.javaObjectType, object : TypeAdapter<Long>() {
+            override fun write(out: JsonWriter, value: Long?) {
+                if (value == null) {
+                    out.nullValue()
+                } else {
+                    out.value(value)
+                }
+            }
+
+            override fun read(`in`: JsonReader): Long? {
+                if (`in`.peek() == JsonToken.NULL) {
+                    `in`.nextNull()
+                    return null
+                }
+                return try {
+                    `in`.nextLong()
+                } catch (e: Exception) {
+                    `in`.nextDouble().toLong()
+                }
+            }
+        })
+        .create()
 
     /**
      * Executes the given block within a file lock.
@@ -49,12 +93,12 @@ object LocalStorage {
                 }
 
                 val result = block(map)
-                
+
                 // Only write back if not shared (exclusive lock implies write intent)
                 if (!shared) {
                     writeFile(raf, gson.toJson(map))
                 }
-                
+
                 result
             }
         }

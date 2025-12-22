@@ -28,3 +28,19 @@ export interface Config {
     syncRules: boolean;
     currentTool: string;
 }
+
+export interface NodeInfo {
+    id: string;
+    timestamp: number;
+    lastHeartbeat?: number;
+}
+
+export interface ClusterState {
+    timestamp: number;
+    leaderId: string;
+    state: State;
+}
+
+export interface CandidatesData {
+    candidates: NodeInfo[];
+}

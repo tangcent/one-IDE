@@ -1,16 +1,7 @@
 package com.oneide
 
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerEvent
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.StartupActivity
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.editor.event.CaretEvent
-import com.intellij.openapi.editor.event.CaretListener
-import com.intellij.openapi.editor.EditorFactory
-import com.intellij.openapi.editor.event.EditorFactoryEvent
-import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.ui.Messages
@@ -23,52 +14,10 @@ import com.oneide.services.RuleService
 
 class OneIDEPlugin : StartupActivity {
     override fun runActivity(project: Project) {
-        val syncService = SyncService.getInstance(project)
+        SyncService.getInstance(project)
         
         // Start Rule Service
         RuleService(project).start()
-        
-        // Listen for file activation and close
-        project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
-            override fun selectionChanged(event: FileEditorManagerEvent) {
-                syncService.handleLocalEvent(project)
-            }
-
-            override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                syncService.handleLocalEvent(project)
-            }
-
-            override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-                syncService.handleLocalEvent(project)
-            }
-        })
-
-        // Listen for caret moves
-        val editorFactory = EditorFactory.getInstance()
-        
-        // Attach to existing editors
-        for (editor in editorFactory.allEditors) {
-            if (editor.project == project) {
-                addCaretListener(editor, project, syncService)
-            }
-        }
-
-        // Listen for new editors
-        editorFactory.addEditorFactoryListener(object : EditorFactoryListener {
-            override fun editorCreated(event: EditorFactoryEvent) {
-                val editor = event.editor
-                if (editor.project != project) return
-                addCaretListener(editor, project, syncService)
-            }
-        }, project)
-    }
-
-    private fun addCaretListener(editor: com.intellij.openapi.editor.Editor, project: Project, syncService: SyncService) {
-        editor.caretModel.addCaretListener(object : CaretListener {
-            override fun caretPositionChanged(e: CaretEvent) {
-                syncService.handleLocalEvent(project)
-            }
-        }, project)
     }
 }
 
