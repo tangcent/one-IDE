@@ -2,6 +2,9 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.0.4] - 2025-12-23
+- refactor(cluster): Optimize the synchronization strategy
+
 ## [1.0.3] - 2025-12-22
 - feat: Significant improve performance
 
