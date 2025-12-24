@@ -23,6 +23,8 @@ export class Candidate extends BaseRole {
 
     private async tryElection() {
         if (!this.cluster.getIdeConnector().isWindowFocused()) {
+            Logger.log('Window not focused, becoming Follower');
+            await this.cluster.becomeFollower();
             return;
         }
 

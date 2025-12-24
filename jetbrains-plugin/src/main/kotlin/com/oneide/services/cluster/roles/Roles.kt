@@ -66,16 +66,17 @@ class Candidate(cluster: ClusterService) : BaseRole(cluster) {
 
     private fun tryElection() {
         if (!cluster.getIdeConnector().isWindowFocused()) {
+            Logger.info("Window not focused, becoming Follower")
             cluster.becomeFollower()
             return
         }
 
-        Logger.info("Candidate attempting election...", IdeMetaData.getInstance(cluster.project))
+        Logger.info("Candidate attempting election...")
         if (cluster.tryAcquireLeadership()) {
-            Logger.info("Election successful, becoming Leader", IdeMetaData.getInstance(cluster.project))
+            Logger.info("Election successful, becoming Leader")
             cluster.becomeLeader()
         } else {
-            Logger.info("Election failed, reverting to Follower", IdeMetaData.getInstance(cluster.project))
+            Logger.info("Election failed, reverting to Follower")
             cluster.becomeFollower()
         }
     }
