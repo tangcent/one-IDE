@@ -18,20 +18,40 @@ import com.oneide.utils.Logger
 import com.oneide.utils.StateHelper
 import java.nio.file.Paths
 
+/**
+ * Service responsible for connecting the IDE events with the synchronization logic.
+ * It listens for user activities (file selection, edits) and captures/applies the IDE state.
+ */
 class IdeConnector(private val project: Project, private val configService: ConfigService) {
     private val metaData = IdeMetaData.getInstance(project)
+    
+    // Callback to be invoked when user activity is detected
     private var onUserActivityCallback: (() -> Unit)? = null
+    
+    // Flag to prevent triggering activity while applying state from external source
     private var isApplyingState = false
+    
+    // Debouncer for user activity (typing, selection changes) -> Outbound
     private val debouncer = Debouncer(300)
+    
+    // Debouncer for applying state (received from other IDEs) -> Inbound
+    internal var applyStateDebouncer = Debouncer(300)
 
     init {
         setupListeners()
     }
 
+    /**
+     * Sets the callback to be invoked when user activity occurs.
+     */
     fun setOnUserActivity(callback: () -> Unit) {
         onUserActivityCallback = callback
     }
 
+    /**
+     * Checks if the IDE window is currently focused.
+     * This handles both EDT and non-EDT threads.
+     */
     fun isWindowFocused(): Boolean {
         if (ApplicationManager.getApplication().isDispatchThread) {
             val window = WindowManager.getInstance().suggestParentWindow(project)
@@ -46,6 +66,9 @@ class IdeConnector(private val project: Project, private val configService: Conf
         }
     }
 
+    /**
+     * Sets up listeners for file editor events, caret movements, and document changes.
+     */
     private fun setupListeners() {
         val connection = project.messageBus.connect()
 
@@ -82,6 +105,10 @@ class IdeConnector(private val project: Project, private val configService: Conf
         eventMulticaster.addDocumentListener(documentListener, project)
     }
 
+    /**
+     * Triggers the user activity callback after a debounce period.
+     * Skips if currently applying state.
+     */
     fun triggerActivity() {
         if (isApplyingState) return
         debouncer.debounce {
@@ -89,6 +116,9 @@ class IdeConnector(private val project: Project, private val configService: Conf
         }
     }
 
+    /**
+     * Captures the current state of the IDE (opened files, active file, cursor positions).
+     */
     fun captureState(): State {
         val rootPath = project.basePath ?: ""
 
@@ -119,97 +149,101 @@ class IdeConnector(private val project: Project, private val configService: Conf
         return StateHelper.buildState(metaData, rootPath, openedFilesList, activePath)
     }
 
+    /**
+     * Applies the received state to the IDE.
+     * This involves opening files, closing irrelevant files, and moving the cursor.
+     */
     fun applyState(state: State, onComplete: (() -> Unit) = {}) {
-        Logger.info("Applying state from ${state.source}", metaData)
-        isApplyingState = true
+        applyStateDebouncer.debounce {
+            Logger.info("Applying state from ${state.source}", metaData)
+            isApplyingState = true
 
-        ApplicationManager.getApplication().invokeLater {
-            try {
-                if (project.isDisposed) return@invokeLater
+            ApplicationManager.getApplication().invokeLater {
+                    try {
+                        if (project.isDisposed) return@invokeLater
 
-                val basePath = project.basePath ?: return@invokeLater
-                val projectPath = Paths.get(basePath).toAbsolutePath().normalize()
-                val projectPathStr = projectPath.toString().lowercase()
+                        val basePath = project.basePath ?: return@invokeLater
+                    val projectPath = Paths.get(basePath).toAbsolutePath().normalize()
+                    val projectPathStr = projectPath.toString().lowercase()
 
-                // 2. Check intersection
-                val stateRoot = Paths.get(state.root.path).toAbsolutePath().normalize()
-                val stateRootStr = stateRoot.toString().lowercase()
-                val hasIntersection = projectPathStr.startsWith(stateRootStr) || stateRootStr.startsWith(projectPathStr)
+                    // 1. Check intersection
+                    // If the current project root has no relationship with the state root, we should not apply the state.
+                    if (!StateHelper.hasIntersection(state, projectPathStr)) {
+                        Logger.info(
+                            "Skipping apply state: Project path $projectPathStr has no intersection with state root ${state.root.path}",
+                            metaData
+                        )
+                        return@invokeLater
+                    }
 
-                if (!hasIntersection) {
-                    Logger.info(
-                        "Skipping apply state: Project path $projectPath has no intersection with state root $stateRoot",
-                        metaData
-                    )
-                    return@invokeLater
-                }
+                    val filesToOpen = StateHelper.getFiles(state, projectPathStr)
 
-                val filesToOpen = StateHelper.getFiles(state, projectPathStr)
+                    val fileEditorManager = FileEditorManager.getInstance(project)
 
-                val fileEditorManager = FileEditorManager.getInstance(project)
-
-                // Close files not in state
-                val currentOpenFiles = fileEditorManager.openFiles
-                for (file in currentOpenFiles) {
-                    if (projectPath != null) {
-                        try {
-                            val fPath = Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
-                            if (!fPath.startsWith(projectPathStr)) continue
-                        } catch (_: Exception) {
+                    // 2. Close files not in state
+                    // We only close files that are part of the project but not in the new state.
+                    val currentOpenFiles = fileEditorManager.openFiles
+                    for (file in currentOpenFiles) {
+                        // Check if file belongs to current project root AND the incoming state's scope
+                        // If the file is outside the scope of the incoming state (e.g. syncing a subfolder),
+                        // we should not close it as the incoming state has no authority over it.
+                        if (!StateHelper.isInsideRoot(projectPathStr, file.path) || !StateHelper.checkPathBelongsToState(state, file.path)) {
                             continue
                         }
-                    }
 
-                    val keep = filesToOpen.any {
-                        Paths.get(it.filePath).toAbsolutePath().normalize().toString()
-                            .lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
-                    }
-                    if (!keep) {
-                        Logger.info("Closing file: ${file.path}", metaData)
-                        fileEditorManager.closeFile(file)
-                    }
-                }
-
-                // Open or Update files
-                for (fileState in filesToOpen) {
-                    val virtualFile = LocalFileSystem.getInstance().findFileByPath(fileState.filePath)
-                    if (virtualFile != null) {
-                        // 1. Open if need open
-                        if (!fileEditorManager.isFileOpen(virtualFile) || fileState.isActive) {
-                            Logger.info("Opening file: ${fileState.filePath}", metaData)
-                            fileEditorManager.openFile(virtualFile, fileState.isActive)
+                        val keep = filesToOpen.any {
+                            Paths.get(it.filePath).toAbsolutePath().normalize().toString()
+                                .lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
                         }
+                        if (!keep) {
+                            Logger.info("Closing file: ${file.path}", metaData)
+                            fileEditorManager.closeFile(file)
+                        }
+                    }
 
-                        // 2. Move caret if need move
-                        if (fileState.cursor >= 0) {
-                            val textEditor = fileEditorManager.getTextEditor(virtualFile)
-                            if (textEditor != null) {
-                                val caretModel = textEditor.editor.caretModel
-                                val scrollingModel = textEditor.editor.scrollingModel
+                    // 3. Open or Update files
+                    // Iterate through files in the state and open/activate/scroll them.
+                    val localFileSystem = LocalFileSystem.getInstance()
+                    for (fileState in filesToOpen) {
+                        val virtualFile = localFileSystem.findFileByPath(fileState.filePath)
+                        if (virtualFile != null) {
+                            // 3.1 Open if need open
+                            if (!fileEditorManager.isFileOpen(virtualFile) || fileState.isActive) {
+                                Logger.info("Opening file: ${fileState.filePath}", metaData)
+                                fileEditorManager.openFile(virtualFile, fileState.isActive)
+                            }
 
-                                if (caretModel.logicalPosition.line != fileState.cursor || caretModel.logicalPosition.column != fileState.column) {
-                                    Logger.info(
-                                        "Moving cursor to ${fileState.cursor}:${fileState.column} in ${fileState.filePath}",
-                                        metaData
-                                    )
-                                    caretModel.moveToLogicalPosition(
-                                        com.intellij.openapi.editor.LogicalPosition(
-                                            fileState.cursor,
-                                            fileState.column
+                            // 3.2 Move caret if need move
+                            if (fileState.cursor >= 0) {
+                                val textEditor = fileEditorManager.getTextEditor(virtualFile)
+                                if (textEditor != null) {
+                                    val caretModel = textEditor.editor.caretModel
+                                    val scrollingModel = textEditor.editor.scrollingModel
+
+                                    if (caretModel.logicalPosition.line != fileState.cursor || caretModel.logicalPosition.column != fileState.column) {
+                                        Logger.info(
+                                            "Moving cursor to ${fileState.cursor}:${fileState.column} in ${fileState.filePath}",
+                                            metaData
                                         )
-                                    )
-                                    scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                        caretModel.moveToLogicalPosition(
+                                            com.intellij.openapi.editor.LogicalPosition(
+                                                fileState.cursor,
+                                                fileState.column
+                                            )
+                                        )
+                                        scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-            } catch (e: Exception) {
-                Logger.error("Error applying state", e, metaData)
-            } finally {
-                isApplyingState = false
-                onComplete()
+                } catch (e: Exception) {
+                    Logger.error("Error applying state", e, metaData)
+                } finally {
+                    isApplyingState = false
+                    onComplete()
+                }
             }
         }
     }

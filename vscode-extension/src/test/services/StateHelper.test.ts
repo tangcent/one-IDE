@@ -4,6 +4,9 @@ import { StateHelper } from '../../services/StateHelper';
 import { FileState, State } from '../../types';
 import { IdeMetaData } from '../../IdeMetaData';
 
+/**
+ * Unit tests for StateHelper utility.
+ */
 describe('StateHelper', () => {
     describe('buildState', () => {
         it('should build a flat state with normalized paths', () => {
@@ -77,6 +80,66 @@ describe('StateHelper', () => {
             };
             const files = StateHelper.getFiles(state, '/root');
             assert.strictEqual(files.length, 0);
+        });
+    });
+
+    describe('isInsideRoot', () => {
+        it('should return true if file is inside root', () => {
+            const root = '/User/Project';
+            const file = '/User/Project/src/file.ts';
+            assert.strictEqual(StateHelper.isInsideRoot(root, file), true);
+        });
+
+        it('should return false if file is outside root', () => {
+            const root = '/User/Project';
+            const file = '/User/Other/file.ts';
+            assert.strictEqual(StateHelper.isInsideRoot(root, file), false);
+        });
+
+        it('should return false for partial directory match', () => {
+            const root = '/User/Project';
+            const file = '/User/ProjectSuffix/file.ts';
+            assert.strictEqual(StateHelper.isInsideRoot(root, file), false);
+        });
+    });
+
+    describe('checkPathBelongsToState', () => {
+        it('should check against state root', () => {
+            const rootPath = '/User/Project';
+            const state: State = {
+                timestamp: Date.now(),
+                source: 'test',
+                ide: 'vscode',
+                root: {
+                    path: path.resolve(rootPath).toLowerCase(),
+                    openedFiles: []
+                }
+            };
+            assert.strictEqual(StateHelper.checkPathBelongsToState(state, '/User/Project/file.ts'), true);
+            assert.strictEqual(StateHelper.checkPathBelongsToState(state, '/User/Other/file.ts'), false);
+        });
+    });
+
+    describe('hasIntersection', () => {
+        it('should work with two strings', () => {
+            assert.strictEqual(StateHelper.hasIntersection('/User/Project', '/User/Project/Sub'), true);
+            assert.strictEqual(StateHelper.hasIntersection('/User/Project/Sub', '/User/Project'), true);
+            assert.strictEqual(StateHelper.hasIntersection('/User/Project', '/User/Other'), false);
+        });
+
+        it('should work with state object', () => {
+            const rootPath = '/User/Project';
+            const state: State = {
+                timestamp: Date.now(),
+                source: 'test',
+                ide: 'vscode',
+                root: {
+                    path: path.resolve(rootPath).toLowerCase(),
+                    openedFiles: []
+                }
+            };
+            assert.strictEqual(StateHelper.hasIntersection(state, '/User/Project/Sub'), true);
+            assert.strictEqual(StateHelper.hasIntersection(state, '/User/Other'), false);
         });
     });
 });

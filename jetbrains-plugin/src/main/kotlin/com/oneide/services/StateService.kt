@@ -54,36 +54,54 @@ class StateService(
         if (isWatching) return
         isWatching = true
 
-        val dir = stateFile.parentFile.toPath()
+        val dirPath = stateFile.parentFile.toPath()
         if (!stateFile.parentFile.exists()) stateFile.parentFile.mkdirs()
 
         // Initial read
         readLatestState()
 
         watchThread = Thread {
-            try {
-                val watchService = FileSystems.getDefault().newWatchService()
-                dir.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE)
+            while (isWatching) {
+                try {
+                    if (!stateFile.parentFile.exists()) stateFile.parentFile.mkdirs()
 
-                while (isWatching) {
-                    val key = watchService.take()
-                    for (event in key.pollEvents()) {
-                        val kind = event.kind()
-                        if (kind == StandardWatchEventKinds.OVERFLOW) continue
+                    FileSystems.getDefault().newWatchService().use { watchService ->
+                        dirPath.register(
+                            watchService,
+                            StandardWatchEventKinds.ENTRY_MODIFY,
+                            StandardWatchEventKinds.ENTRY_CREATE
+                        )
 
-                        val filename = event.context() as Path
-                        if (filename.toString() == "state.json") {
-                            // Give a small delay for file write to complete
-                            Thread.sleep(50)
-                            readLatestState()
+                        while (isWatching) {
+                            val key = watchService.take()
+                            for (event in key.pollEvents()) {
+                                val kind = event.kind()
+                                if (kind == StandardWatchEventKinds.OVERFLOW) continue
+
+                                val filename = event.context() as Path
+                                if (filename.toString() == "state.json") {
+                                    // Give a small delay for file write to complete
+                                    Thread.sleep(50)
+                                    readLatestState()
+                                }
+                            }
+                            if (!key.reset()) {
+                                Logger.error("Watch key reset failed, directory might be inaccessible. Retrying...")
+                                break
+                            }
                         }
                     }
-                    if (!key.reset()) break
+                } catch (_: InterruptedException) {
+                    // Stopped
+                    break
+                } catch (e: Exception) {
+                    Logger.error("Error watching state file, retrying...", e, metaData)
+                    try {
+                        Thread.sleep(2000)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
                 }
-            } catch (_: InterruptedException) {
-                // Stopped
-            } catch (e: Exception) {
-                Logger.error("Error watching state file", e, metaData)
             }
         }
         watchThread?.start()
@@ -110,7 +128,7 @@ class StateService(
                 Thread.sleep(100)
                 readLatestState(retries - 1)
             } else {
-                // Logger.error("Error reading state file", e, metaData)
+                Logger.error("Error reading state file", e, metaData)
             }
         }
     }

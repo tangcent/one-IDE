@@ -8,6 +8,9 @@ import com.oneide.models.State
 import org.junit.Test
 import java.nio.file.Paths
 
+/**
+ * Unit tests for StateHelper.
+ */
 class StateHelperTest : BasePlatformTestCase() {
 
     private lateinit var metaData: IdeMetaData
@@ -102,5 +105,57 @@ class StateHelperTest : BasePlatformTestCase() {
         )
         val files = StateHelper.getFiles(state, "/root")
         assertEquals(0, files.size)
+    }
+
+    @Test
+    fun `test isInsideRoot`() {
+        val root = "/User/Project"
+        val fileInside = "/User/Project/src/file.kt"
+        val fileOutside = "/User/Other/file.kt"
+        val filePartial = "/User/ProjectSuffix/file.kt"
+
+        assertTrue(StateHelper.isInsideRoot(root, fileInside))
+        assertFalse(StateHelper.isInsideRoot(root, fileOutside))
+        assertFalse(StateHelper.isInsideRoot(root, filePartial))
+    }
+
+    @Test
+    fun `test checkPathBelongsToState`() {
+        val rootPath = "/User/Project"
+        val rootPathLower = Paths.get(rootPath).toAbsolutePath().normalize().toString().lowercase()
+        val state = State(
+            timestamp = System.currentTimeMillis(),
+            source = "test",
+            ide = "jetbrains",
+            root = FolderState(
+                path = rootPathLower,
+                openedFiles = mutableListOf()
+            )
+        )
+
+        assertTrue(StateHelper.checkPathBelongsToState(state, "/User/Project/src/file.kt"))
+        assertFalse(StateHelper.checkPathBelongsToState(state, "/User/Other/file.kt"))
+    }
+
+    @Test
+    fun `test hasIntersection`() {
+        assertTrue(StateHelper.hasIntersection("/User/Project", "/User/Project/Sub"))
+        assertTrue(StateHelper.hasIntersection("/User/Project/Sub", "/User/Project"))
+        assertFalse(StateHelper.hasIntersection("/User/Project", "/User/Other"))
+
+        val rootPath = "/User/Project"
+        val rootPathLower = Paths.get(rootPath).toAbsolutePath().normalize().toString().lowercase()
+        val state = State(
+            timestamp = System.currentTimeMillis(),
+            source = "test",
+            ide = "jetbrains",
+            root = FolderState(
+                path = rootPathLower,
+                openedFiles = mutableListOf()
+            )
+        )
+
+        assertTrue(StateHelper.hasIntersection(state, "/User/Project/Sub"))
+        assertFalse(StateHelper.hasIntersection(state, "/User/Other"))
     }
 }

@@ -1,8 +1,10 @@
 package com.oneide.models
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonInclude
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class FileState(
     val filePath: String = "",
     val cursor: Int = 0,
@@ -11,12 +13,14 @@ data class FileState(
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class FolderState(
     val path: String = "",
     val openedFiles: MutableList<FileState> = mutableListOf()
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class State(
     val timestamp: Long = 0,
     val source: String = "",
@@ -29,6 +33,7 @@ enum class Role {
 }
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class NodeInfo(
     val id: String = "",
     val timestamp: Long = 0,
@@ -36,6 +41,7 @@ data class NodeInfo(
 )
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class ClusterState(
     val timestamp: Long = 0,
     val leaderId: String = "",
@@ -43,6 +49,7 @@ data class ClusterState(
 )
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CandidatesData(
     val candidates: MutableList<NodeInfo> = mutableListOf()
 )
