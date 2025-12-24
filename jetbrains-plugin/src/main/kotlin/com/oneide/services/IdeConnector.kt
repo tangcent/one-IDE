@@ -1,25 +1,22 @@
 package com.oneide.services
 
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.wm.WindowManager
-import com.oneide.models.FileState
-import com.oneide.models.FolderState
-import com.oneide.models.IdeMetaData
-import com.oneide.models.State
-import com.oneide.utils.Logger
-import java.io.File
-import java.nio.file.Paths
-import java.util.ArrayDeque
-
 import com.intellij.openapi.editor.event.CaretListener
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.WindowManager
+import com.oneide.models.FileState
+import com.oneide.models.IdeMetaData
+import com.oneide.models.State
 import com.oneide.utils.Debouncer
+import com.oneide.utils.Logger
+import com.oneide.utils.StateHelper
+import java.nio.file.Paths
 
 class IdeConnector(private val project: Project, private val configService: ConfigService) {
     private val metaData = IdeMetaData.getInstance(project)
@@ -94,43 +91,18 @@ class IdeConnector(private val project: Project, private val configService: Conf
 
     fun captureState(): State {
         val rootPath = project.basePath ?: ""
-        val rootPathLower = rootPath.lowercase()
-        val rootNode = FolderState(rootPath)
 
         val fileEditorManager = FileEditorManager.getInstance(project)
         val openFiles = fileEditorManager.openFiles
         val selectedFiles = fileEditorManager.selectedFiles
         val activePath = if (selectedFiles.isNotEmpty()) selectedFiles[0].path else null
-        val activePathLower = activePath?.lowercase()
+
+        val openedFilesList = mutableListOf<FileState>()
 
         for (file in openFiles) {
             val path = file.path
-            val pathLower = path.lowercase()
             if (!configService.shouldSyncFile(path)) continue
 
-            // Find or create folder node
-            var currentNode = rootNode
-            if (pathLower.startsWith(rootPathLower) && pathLower != rootPathLower) {
-                val relative = File(path).relativeTo(File(rootPath)).parent
-                if (relative != null) {
-                    val parts = relative.split(File.separator)
-                    var currentPath = rootPath
-
-                    for (part in parts) {
-                        if (part.isEmpty()) continue
-                        currentPath = currentPath + File.separator + part
-                        val currentPathLower = currentPath.lowercase()
-
-                        var next = currentNode.subFolders.find { it.path.lowercase() == currentPathLower }
-                        if (next == null) {
-                            next = FolderState(currentPath)
-                            currentNode.subFolders.add(next)
-                        }
-                        currentNode = next
-                    }
-                }
-            }
-            
             // Get cursor
             var cursor = 0
             var column = 0
@@ -140,21 +112,11 @@ class IdeConnector(private val project: Project, private val configService: Conf
                 cursor = logicalPosition.line
                 column = logicalPosition.column
             }
-            
-            val isActive = pathLower == activePathLower
-            currentNode.openedFiles.add(FileState(path, cursor, column, isActive))
 
-            if (isActive) {
-                currentNode.activeFile = path
-            }
+            openedFilesList.add(FileState(filePath = path, cursor = cursor, column = column))
         }
 
-        return State(
-            timestamp = System.currentTimeMillis(),
-            source = metaData.id,
-            ide = "jetbrains",
-            root = rootNode
-        )
+        return StateHelper.buildState(metaData, rootPath, openedFilesList, activePath)
     }
 
     fun applyState(state: State, onComplete: (() -> Unit) = {}) {
@@ -182,26 +144,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     return@invokeLater
                 }
 
-                val filesToOpen = mutableListOf<FileState>()
-                val traverseQueue = ArrayDeque<FolderState>()
-                traverseQueue.add(state.root)
-
-                while (!traverseQueue.isEmpty()) {
-                    val node = traverseQueue.poll()
-                    if (projectPath != null) {
-                        node.openedFiles.filter { fs ->
-                            try {
-                                val fPath = Paths.get(fs.filePath).toAbsolutePath().normalize().toString().lowercase()
-                                fPath.startsWith(projectPathStr)
-                            } catch (_: Exception) {
-                                false
-                            }
-                        }.forEach { filesToOpen.add(it) }
-                    } else {
-                        filesToOpen.addAll(node.openedFiles)
-                    }
-                    traverseQueue.addAll(node.subFolders)
-                }
+                val filesToOpen = StateHelper.getFiles(state, projectPathStr)
 
                 val fileEditorManager = FileEditorManager.getInstance(project)
 
@@ -217,7 +160,10 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         }
                     }
 
-                    val keep = filesToOpen.any { Paths.get(it.filePath).toAbsolutePath().normalize().toString().lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase() }
+                    val keep = filesToOpen.any {
+                        Paths.get(it.filePath).toAbsolutePath().normalize().toString()
+                            .lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
+                    }
                     if (!keep) {
                         Logger.info("Closing file: ${file.path}", metaData)
                         fileEditorManager.closeFile(file)

@@ -15,7 +15,6 @@ export class StateService {
     private stateFile: string;
     private onStateReceivedCallback: ((state: State) => void) | null = null;
     private watcher: fs.FSWatcher | null = null;
-    private lastStateTimestamp = 0;
 
     constructor(oneIdeDir: string) {
         this.stateFile = path.join(oneIdeDir, 'cluster', 'state.json');

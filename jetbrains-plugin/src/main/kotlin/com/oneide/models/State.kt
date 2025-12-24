@@ -13,9 +13,7 @@ data class FileState(
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 data class FolderState(
     val path: String = "",
-    val openedFiles: MutableList<FileState> = mutableListOf(),
-    var activeFile: String? = null,
-    val subFolders: MutableList<FolderState> = mutableListOf()
+    val openedFiles: MutableList<FileState> = mutableListOf()
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)

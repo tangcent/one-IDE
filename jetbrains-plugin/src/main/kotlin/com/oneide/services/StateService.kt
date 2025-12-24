@@ -80,7 +80,7 @@ class StateService(
                     }
                     if (!key.reset()) break
                 }
-            } catch (e: InterruptedException) {
+            } catch (_: InterruptedException) {
                 // Stopped
             } catch (e: Exception) {
                 Logger.error("Error watching state file", e, metaData)

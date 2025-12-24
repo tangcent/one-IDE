@@ -5,6 +5,8 @@ import { ConfigService } from './ConfigService';
 import { Logger } from '../logger';
 import { IdeMetaData } from '../IdeMetaData';
 
+import { StateHelper } from './StateHelper';
+
 export class IdeConnector {
     private configService: ConfigService;
     private onUserActivityCallback: (() => void) | null = null;
@@ -51,86 +53,38 @@ export class IdeConnector {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         const rootPath = workspaceFolders && workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
-        const rootNode: FolderState = {
-            path: rootPath,
-            openedFiles: [],
-            subFolders: []
-        };
-
         const activeEditor = vscode.window.activeTextEditor;
         const activePath = activeEditor?.document.uri.fsPath;
 
-        const findOrCreateFolder = (fullPath: string): FolderState => {
-            const lowerPath = fullPath.toLowerCase();
-            const lowerRoot = rootPath.toLowerCase();
-            if (!lowerPath.startsWith(lowerRoot)) return rootNode;
-            if (lowerPath === lowerRoot) return rootNode;
-
-            const relative = path.relative(rootPath, fullPath);
-            const parts = relative.split(path.sep);
-
-            let current = rootNode;
-            let currentPath = rootPath;
-
-            for (const part of parts) {
-                if (!part) continue;
-                currentPath = path.join(currentPath, part);
-                const currentPathLower = currentPath.toLowerCase();
-                let next = current.subFolders.find(f => f.path.toLowerCase() === currentPathLower);
-                if (!next) {
-                    next = {
-                        path: currentPath,
-                        openedFiles: [],
-                        subFolders: []
-                    };
-                    current.subFolders.push(next);
-                }
-                current = next;
-            }
-            return current;
-        };
-
+        const openedFiles: FileState[] = [];
         const tabs: vscode.Tab[] = vscode.window.tabGroups.all.flatMap(group => group.tabs);
 
         for (const tab of tabs) {
             if (tab.input instanceof vscode.TabInputText) {
                 const fsPath = tab.input.uri.fsPath;
                 if (this.configService.shouldSyncFile(fsPath)) {
-                    const dirPath = path.dirname(fsPath);
-                    const folderNode = findOrCreateFolder(dirPath);
-
-                    const fsPathLower = fsPath.toLowerCase();
-                    const activePathLower = activePath?.toLowerCase();
-                    
                     let cursor = 0;
                     let column = 0;
+                    
+                    const fsPathLower = fsPath.toLowerCase();
                     const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath.toLowerCase() === fsPathLower);
+                    
                     if (editor) {
                         cursor = editor.selection.active.line;
                         column = editor.selection.active.character;
                     }
 
-                    folderNode.openedFiles.push({
+                    openedFiles.push({
                         filePath: fsPath,
                         cursor: cursor,
                         column: column,
-                        isActive: fsPathLower === activePathLower
+                        isActive: false // will be recalculated in buildState
                     });
-
-                    if (fsPathLower === activePathLower) {
-                        folderNode.activeFile = fsPath;
-                    }
                 }
             }
         }
 
-        const meta = IdeMetaData.getInstance();
-        return {
-            timestamp: Date.now(),
-            source: meta.id,
-            ide: 'vscode',
-            root: rootNode
-        };
+        return StateHelper.buildState(rootPath, openedFiles, activePath);
     }
 
     public async applyState(state: State) {
@@ -139,7 +93,6 @@ export class IdeConnector {
 
         try {
             const filesToOpen: FileState[] = [];
-            let activeFileToSet: string | undefined;
             const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             const normalizedRoot = rootPath ? path.resolve(rootPath) : undefined;
             if (!normalizedRoot) {
@@ -159,29 +112,7 @@ export class IdeConnector {
                 return;
             }
 
-            const traverse = (node: FolderState) => {
-                if (node.openedFiles) {
-                    if (normalizedRoot) {
-                        const filtered = node.openedFiles.filter(f => {
-                            try {
-                                const fPath = path.resolve(f.filePath);
-                                return fPath.toLowerCase().startsWith(normalizedRoot.toLowerCase()) || normalizedRoot.toLowerCase().startsWith(fPath.toLowerCase());
-                            } catch (e) {
-                                return false;
-                            }
-                        });
-                        filesToOpen.push(...filtered);
-                    } else {
-                        filesToOpen.push(...node.openedFiles);
-                    }
-                }
-                if (node.activeFile) activeFileToSet = node.activeFile;
-                if (node.subFolders) {
-                    node.subFolders.forEach(traverse);
-                }
-            };
-
-            traverse(state.root);
+            filesToOpen.push(...StateHelper.getFiles(state, normalizedRoot));
 
             const currentTabs = vscode.window.tabGroups.all.flatMap(group => group.tabs);
             const currentFiles = new Map<string, vscode.Tab>();

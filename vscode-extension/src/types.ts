@@ -8,8 +8,6 @@ export interface FileState {
 export interface FolderState {
     path: string;
     openedFiles: FileState[];
-    activeFile?: string;
-    subFolders: FolderState[];
 }
 
 export interface State {
