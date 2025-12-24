@@ -2,6 +2,9 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.0.5] - 2025-12-24
+- fix: make file path comparisons case insensitive
+
 ## [1.0.4] - 2025-12-23
 - refactor(cluster): Optimize the synchronization strategy
 
