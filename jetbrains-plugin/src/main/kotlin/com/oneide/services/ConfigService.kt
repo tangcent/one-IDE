@@ -15,6 +15,7 @@ import java.nio.file.FileSystems
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardWatchEventKinds
+import java.nio.file.WatchService
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ConfigService(private val oneIdeDir: Path) {
@@ -24,7 +25,8 @@ class ConfigService(private val oneIdeDir: Path) {
 
     private var config: Config = Config()
     private val isRunning = AtomicBoolean(true)
-    private var watchService: java.nio.file.WatchService? = null
+    private var watchService: WatchService? = null
+    private var watchThread: Thread? = null
 
     init {
         initConfigFile()
@@ -34,11 +36,19 @@ class ConfigService(private val oneIdeDir: Path) {
 
     fun dispose() {
         isRunning.set(false)
+
+        // Interrupt the watch thread if it's still running
+        watchThread?.interrupt()
+
         try {
             watchService?.close()
         } catch (e: Exception) {
             // Ignore
         }
+
+        // Clear references
+        watchThread = null
+        watchService = null
     }
 
     fun getConfig(): Config {
@@ -52,7 +62,7 @@ class ConfigService(private val oneIdeDir: Path) {
         // 1. Update Global Config (and save to file)
         config.excludeFiles = newConfig.excludeFiles
         config.excludeGitIgnore = newConfig.excludeGitIgnore
-        
+
         try {
             val application = ApplicationManager.getApplication()
             if (application != null) {
@@ -72,7 +82,7 @@ class ConfigService(private val oneIdeDir: Path) {
         val properties = PropertiesComponent.getInstance()
         properties.setValue("com.oneide.ai.syncRules", newConfig.syncRules)
         properties.setValue("com.oneide.ai.currentTool", newConfig.currentTool)
-        
+
         // Update local memory copy
         config.syncRules = newConfig.syncRules
         config.currentTool = newConfig.currentTool
@@ -134,7 +144,8 @@ class ConfigService(private val oneIdeDir: Path) {
     private fun watchConfigFile() {
         val thread = Thread {
             try {
-                watchService = FileSystems.getDefault().newWatchService()
+                val watchService = FileSystems.getDefault().newWatchService()
+                this.watchService = watchService
                 oneIdeDir.register(
                     watchService,
                     StandardWatchEventKinds.ENTRY_MODIFY,
@@ -142,21 +153,30 @@ class ConfigService(private val oneIdeDir: Path) {
                 )
 
                 while (isRunning.get()) {
-                    val key = watchService?.take() ?: break // Blocks until event
-                    for (event in key.pollEvents()) {
-                        val kind = event.kind()
-                        if (kind == StandardWatchEventKinds.OVERFLOW) continue
+                    try {
+                        val key = watchService?.take() ?: break // Blocks until event
+                        for (event in key.pollEvents()) {
+                            val kind = event.kind()
+                            if (kind == StandardWatchEventKinds.OVERFLOW) continue
 
-                        val filename = event.context() as Path
-                        if (filename.toString() == "config.json") {
-                            // Slight delay to ensure file write is complete
-                            Thread.sleep(50)
-                            logger.info("Config file changed, reloading...")
-                            loadConfig()
+                            val filename = event.context() as Path
+                            if (filename.toString() == "config.json") {
+                                // Slight delay to ensure file write is complete
+                                Thread.sleep(50)
+                                logger.info("Config file changed, reloading...")
+                                loadConfig()
+                            }
                         }
-                    }
 
-                    if (!key.reset()) {
+                        if (!key.reset()) {
+                            break
+                        }
+                    } catch (e: java.nio.file.ClosedWatchServiceException) {
+                        // Watch service was closed, exit gracefully
+                        break
+                    } catch (e: java.lang.InterruptedException) {
+                        // Thread was interrupted, exit gracefully
+                        Thread.currentThread().interrupt()
                         break
                     }
                 }
@@ -169,6 +189,7 @@ class ConfigService(private val oneIdeDir: Path) {
             }
         }
         thread.isDaemon = true
+        watchThread = thread
         thread.start()
     }
 
