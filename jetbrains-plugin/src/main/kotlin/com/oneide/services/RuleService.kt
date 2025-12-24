@@ -111,9 +111,9 @@ class RuleService(private val project: Project) {
         project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
             override fun after(events: List<VFileEvent>) {
                 val relevantEvents = events.filter { event ->
-                    val path = event.path
+                    val path = event.path.lowercase()
                     AITool.instance.getAllAIConfigs().values.any { config ->
-                        path.contains(config.ruleRoot)
+                        path.contains(config.ruleRoot.lowercase())
                     }
                 }
 

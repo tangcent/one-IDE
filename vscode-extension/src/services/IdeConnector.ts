@@ -61,8 +61,10 @@ export class IdeConnector {
         const activePath = activeEditor?.document.uri.fsPath;
 
         const findOrCreateFolder = (fullPath: string): FolderState => {
-            if (!fullPath.startsWith(rootPath)) return rootNode;
-            if (fullPath === rootPath) return rootNode;
+            const lowerPath = fullPath.toLowerCase();
+            const lowerRoot = rootPath.toLowerCase();
+            if (!lowerPath.startsWith(lowerRoot)) return rootNode;
+            if (lowerPath === lowerRoot) return rootNode;
 
             const relative = path.relative(rootPath, fullPath);
             const parts = relative.split(path.sep);
@@ -73,7 +75,8 @@ export class IdeConnector {
             for (const part of parts) {
                 if (!part) continue;
                 currentPath = path.join(currentPath, part);
-                let next = current.subFolders.find(f => f.path === currentPath);
+                const currentPathLower = currentPath.toLowerCase();
+                let next = current.subFolders.find(f => f.path.toLowerCase() === currentPathLower);
                 if (!next) {
                     next = {
                         path: currentPath,
@@ -96,9 +99,12 @@ export class IdeConnector {
                     const dirPath = path.dirname(fsPath);
                     const folderNode = findOrCreateFolder(dirPath);
 
+                    const fsPathLower = fsPath.toLowerCase();
+                    const activePathLower = activePath?.toLowerCase();
+                    
                     let cursor = 0;
                     let column = 0;
-                    const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === fsPath);
+                    const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath.toLowerCase() === fsPathLower);
                     if (editor) {
                         cursor = editor.selection.active.line;
                         column = editor.selection.active.character;
@@ -108,10 +114,10 @@ export class IdeConnector {
                         filePath: fsPath,
                         cursor: cursor,
                         column: column,
-                        isActive: fsPath === activePath
+                        isActive: fsPathLower === activePathLower
                     });
 
-                    if (fsPath === activePath) {
+                    if (fsPathLower === activePathLower) {
                         folderNode.activeFile = fsPath;
                     }
                 }
@@ -145,7 +151,9 @@ export class IdeConnector {
 
             // 2. Check intersection
             const normalizedStateRoot = path.resolve(stateRoot);
-            const hasIntersection = normalizedRoot.startsWith(normalizedStateRoot) || normalizedStateRoot.startsWith(normalizedRoot);
+            const lowerRoot = normalizedRoot.toLowerCase();
+            const lowerStateRoot = normalizedStateRoot.toLowerCase();
+            const hasIntersection = lowerRoot.startsWith(lowerStateRoot) || lowerStateRoot.startsWith(lowerRoot);
             if (!hasIntersection) {
                 Logger.log(`Skipping apply state: Project path ${normalizedRoot} has no intersection with state root ${normalizedStateRoot}`);
                 return;
@@ -157,7 +165,7 @@ export class IdeConnector {
                         const filtered = node.openedFiles.filter(f => {
                             try {
                                 const fPath = path.resolve(f.filePath);
-                                return fPath.startsWith(normalizedRoot) || normalizedRoot.startsWith(fPath);
+                                return fPath.toLowerCase().startsWith(normalizedRoot.toLowerCase()) || normalizedRoot.toLowerCase().startsWith(fPath.toLowerCase());
                             } catch (e) {
                                 return false;
                             }
@@ -192,7 +200,7 @@ export class IdeConnector {
                     if (!isInside) continue;
                 }
 
-                const keep = filesToOpen.some(f => f.filePath === fsPath);
+                const keep = filesToOpen.some(f => path.resolve(f.filePath).toLowerCase() === path.resolve(fsPath).toLowerCase());
                 if (!keep) {
                     Logger.log(`Closing file: ${fsPath}`);
                     await vscode.window.tabGroups.close(tab);
@@ -207,8 +215,8 @@ export class IdeConnector {
 
                     // 1. Open if need open
                     let editor = this.getTextEditor(fsPath);
-                    const isActive = vscode.window.activeTextEditor?.document.uri.fsPath === fsPath;
-                    const isOpened = currentFiles.has(fsPath);
+                    const isActive = vscode.window.activeTextEditor?.document.uri.fsPath.toLowerCase() === fsPath.toLowerCase();
+                    const isOpened = Array.from(currentFiles.keys()).some(k => k.toLowerCase() === fsPath.toLowerCase());
 
                     if ((!isOpened && !editor) || (fileState.isActive && !isActive)) {
                         Logger.log(`Opening/Updating file: ${fsPath}`);
@@ -244,7 +252,8 @@ export class IdeConnector {
     }
 
     private getTextEditor(fsPath: string): vscode.TextEditor | undefined {
-        return vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === fsPath);
+        const normalized = fsPath.toLowerCase();
+        return vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath.toLowerCase() === normalized);
     }
 
     public dispose() {

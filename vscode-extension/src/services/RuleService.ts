@@ -114,12 +114,12 @@ export class RuleService {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) return;
         const rootPath = workspaceFolders[0].uri.fsPath;
-        const relativePath = path.relative(rootPath, uri.fsPath).split(path.sep).join('/');
+        const relativePath = path.relative(rootPath.toLowerCase(), uri.fsPath.toLowerCase()).split(path.sep).join('/');
 
         let relevant = false;
         const aiTools = AITool.getInstance().getAllAIConfigs();
         for (const config of Object.values(aiTools)) {
-            if (config.patterns.some(p => minimatch(relativePath, p, { dot: true }))) {
+            if (config.patterns.some(p => minimatch(relativePath, p, { dot: true, nocase: true }))) {
                 relevant = true;
                 break;
             }

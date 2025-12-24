@@ -94,20 +94,23 @@ class IdeConnector(private val project: Project, private val configService: Conf
 
     fun captureState(): State {
         val rootPath = project.basePath ?: ""
+        val rootPathLower = rootPath.lowercase()
         val rootNode = FolderState(rootPath)
 
         val fileEditorManager = FileEditorManager.getInstance(project)
         val openFiles = fileEditorManager.openFiles
         val selectedFiles = fileEditorManager.selectedFiles
         val activePath = if (selectedFiles.isNotEmpty()) selectedFiles[0].path else null
+        val activePathLower = activePath?.lowercase()
 
         for (file in openFiles) {
             val path = file.path
+            val pathLower = path.lowercase()
             if (!configService.shouldSyncFile(path)) continue
 
             // Find or create folder node
             var currentNode = rootNode
-            if (path.startsWith(rootPath) && path != rootPath) {
+            if (pathLower.startsWith(rootPathLower) && pathLower != rootPathLower) {
                 val relative = File(path).relativeTo(File(rootPath)).parent
                 if (relative != null) {
                     val parts = relative.split(File.separator)
@@ -116,8 +119,9 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     for (part in parts) {
                         if (part.isEmpty()) continue
                         currentPath = currentPath + File.separator + part
+                        val currentPathLower = currentPath.lowercase()
 
-                        var next = currentNode.subFolders.find { it.path == currentPath }
+                        var next = currentNode.subFolders.find { it.path.lowercase() == currentPathLower }
                         if (next == null) {
                             next = FolderState(currentPath)
                             currentNode.subFolders.add(next)
@@ -126,7 +130,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     }
                 }
             }
-
+            
             // Get cursor
             var cursor = 0
             var column = 0
@@ -136,8 +140,8 @@ class IdeConnector(private val project: Project, private val configService: Conf
                 cursor = logicalPosition.line
                 column = logicalPosition.column
             }
-
-            val isActive = path == activePath
+            
+            val isActive = pathLower == activePathLower
             currentNode.openedFiles.add(FileState(path, cursor, column, isActive))
 
             if (isActive) {
@@ -163,10 +167,12 @@ class IdeConnector(private val project: Project, private val configService: Conf
 
                 val basePath = project.basePath ?: return@invokeLater
                 val projectPath = Paths.get(basePath).toAbsolutePath().normalize()
+                val projectPathStr = projectPath.toString().lowercase()
 
                 // 2. Check intersection
                 val stateRoot = Paths.get(state.root.path).toAbsolutePath().normalize()
-                val hasIntersection = projectPath.startsWith(stateRoot) || stateRoot.startsWith(projectPath)
+                val stateRootStr = stateRoot.toString().lowercase()
+                val hasIntersection = projectPathStr.startsWith(stateRootStr) || stateRootStr.startsWith(projectPathStr)
 
                 if (!hasIntersection) {
                     Logger.info(
@@ -185,8 +191,8 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     if (projectPath != null) {
                         node.openedFiles.filter { fs ->
                             try {
-                                val fPath = Paths.get(fs.filePath).toAbsolutePath().normalize()
-                                fPath.startsWith(projectPath)
+                                val fPath = Paths.get(fs.filePath).toAbsolutePath().normalize().toString().lowercase()
+                                fPath.startsWith(projectPathStr)
                             } catch (_: Exception) {
                                 false
                             }
@@ -204,14 +210,14 @@ class IdeConnector(private val project: Project, private val configService: Conf
                 for (file in currentOpenFiles) {
                     if (projectPath != null) {
                         try {
-                            val fPath = Paths.get(file.path).toAbsolutePath().normalize()
-                            if (!fPath.startsWith(projectPath)) continue
+                            val fPath = Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
+                            if (!fPath.startsWith(projectPathStr)) continue
                         } catch (_: Exception) {
                             continue
                         }
                     }
 
-                    val keep = filesToOpen.any { it.filePath == file.path }
+                    val keep = filesToOpen.any { Paths.get(it.filePath).toAbsolutePath().normalize().toString().lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase() }
                     if (!keep) {
                         Logger.info("Closing file: ${file.path}", metaData)
                         fileEditorManager.closeFile(file)

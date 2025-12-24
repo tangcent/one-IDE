@@ -228,6 +228,6 @@ class ConfigService(private val oneIdeDir: Path) {
 
     private fun isFileInProject(project: Project, filePath: String): Boolean {
         val projectPath = project.basePath ?: return false
-        return filePath.startsWith(projectPath)
+        return filePath.lowercase().startsWith(projectPath.lowercase())
     }
 }

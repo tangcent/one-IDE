@@ -95,7 +95,7 @@ class StateService(
         watchThread = null
     }
 
-    private fun readLatestState() {
+    private fun readLatestState(retries: Int = 3) {
         if (!stateFile.exists()) return
 
         try {
@@ -105,7 +105,13 @@ class StateService(
                 onStateReceivedCallback?.invoke(clusterState.state)
             }
         } catch (e: Exception) {
-            // Logger.error("Error reading state file", e, metaData)
+            if (retries > 0) {
+                // Retry after a short delay if the file is being written
+                Thread.sleep(100)
+                readLatestState(retries - 1)
+            } else {
+                // Logger.error("Error reading state file", e, metaData)
+            }
         }
     }
 

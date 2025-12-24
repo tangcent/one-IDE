@@ -72,7 +72,7 @@ export class StateService {
         }
     }
 
-    private readLatestState() {
+    private readLatestState(retries = 3) {
         if (!fs.existsSync(this.stateFile)) return;
 
         try {
@@ -87,7 +87,12 @@ export class StateService {
                 }
             }
         } catch (e) {
-            Logger.log('Error reading state file: ' + e);
+            if (retries > 0) {
+                // Retry after a short delay if the file is being written
+                setTimeout(() => this.readLatestState(retries - 1), 100);
+            } else {
+                Logger.log('Error reading state file: ' + e);
+            }
         }
     }
 
