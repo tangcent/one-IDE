@@ -23,6 +23,7 @@ class StateService(
     oneIdeDir: Path,
     private val metaData: IdeMetaData
 ) {
+    private val logger = Logger.withMetaData(metaData)
     private val stateFile: File = oneIdeDir.resolve("cluster").resolve("state.json").toFile()
     private val mapper = jacksonObjectMapper()
     private var onStateReceivedCallback: ((State) -> Unit)? = null
@@ -123,8 +124,8 @@ class StateService(
                 metaData.lastCheckPoint = clusterState.timestamp
                 onStateReceivedCallback?.invoke(clusterState.state)
             }
-        } catch (e: MismatchedInputException) {
-            Logger.warn("State file format mismatch, ignoring...", null, metaData)
+        } catch (_: MismatchedInputException) {
+            logger.warn("State file format mismatch, ignoring...")
             // Optional: delete or backup the file if needed, but for now just ignore
         } catch (e: Exception) {
             if (retries > 0) {
@@ -132,7 +133,7 @@ class StateService(
                 Thread.sleep(100)
                 readLatestState(retries - 1)
             } else {
-                Logger.error("Error reading state file", e, metaData)
+                logger.error("Error reading state file", e)
             }
         }
     }

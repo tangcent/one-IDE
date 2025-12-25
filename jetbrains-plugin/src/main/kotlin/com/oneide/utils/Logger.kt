@@ -1,5 +1,6 @@
 package com.oneide.utils
 
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger as IdeaLogger
 import com.oneide.models.IdeMetaData
 import java.io.File
@@ -83,5 +84,24 @@ object Logger {
         } else {
             writeToFile("ERROR", message, metaData)
         }
+    }
+
+    fun withMetaData(metaData: IdeMetaData): MetaDataLogger = MetaDataLogger(metaData)
+
+    fun withProject(project: Project): MetaDataLogger =
+        withMetaData(IdeMetaData.getInstance(project))
+}
+
+class MetaDataLogger(private val metaData: IdeMetaData) {
+    fun info(message: String) {
+        Logger.info(message, metaData)
+    }
+
+    fun warn(message: String, e: Throwable? = null) {
+        Logger.warn(message, e, metaData)
+    }
+
+    fun error(message: String, e: Throwable? = null) {
+        Logger.error(message, e, metaData)
     }
 }

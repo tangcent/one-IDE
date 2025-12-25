@@ -13,6 +13,9 @@ interface IRole {
 }
 
 abstract class BaseRole(protected val cluster: ClusterService) : IRole {
+    protected val logger
+        get() = Logger.withProject(cluster.project)
+
     override fun dispose() {
         // Default cleanup
     }
@@ -28,7 +31,7 @@ abstract class BaseRole(protected val cluster: ClusterService) : IRole {
 
 class Follower(cluster: ClusterService) : BaseRole(cluster) {
     override fun init() {
-        Logger.info("Role: Follower initialized", IdeMetaData.getInstance(cluster.project))
+        logger.info("Role: Follower initialized")
         cluster.getStateService().startWatching()
     }
 
@@ -39,9 +42,8 @@ class Follower(cluster: ClusterService) : BaseRole(cluster) {
 
     override fun onUserActivity() {
         if (!cluster.checkLeaderHealth()) {
-            Logger.info(
-                "User activity detected on Follower and Leader unhealthy -> Switching to Candidate",
-                IdeMetaData.getInstance(cluster.project)
+            logger.info(
+                "User activity detected on Follower and Leader unhealthy -> Switching to Candidate"
             )
             cluster.becomeCandidate()
         }
@@ -51,7 +53,7 @@ class Follower(cluster: ClusterService) : BaseRole(cluster) {
 
 class Candidate(cluster: ClusterService) : BaseRole(cluster) {
     override fun init() {
-        Logger.info("Role: Candidate initialized", IdeMetaData.getInstance(cluster.project))
+        logger.info("Role: Candidate initialized")
         tryElection()
     }
 
@@ -66,17 +68,17 @@ class Candidate(cluster: ClusterService) : BaseRole(cluster) {
 
     private fun tryElection() {
         if (!cluster.getIdeConnector().isWindowFocused()) {
-            Logger.info("Window not focused, becoming Follower")
+            logger.info("Window not focused, becoming Follower")
             cluster.becomeFollower()
             return
         }
 
-        Logger.info("Candidate attempting election...")
+        logger.info("Candidate attempting election...")
         if (cluster.tryAcquireLeadership()) {
-            Logger.info("Election successful, becoming Leader")
+            logger.info("Election successful, becoming Leader")
             cluster.becomeLeader()
         } else {
-            Logger.info("Election failed, reverting to Follower")
+            logger.info("Election failed, reverting to Follower")
             cluster.becomeFollower()
         }
     }
@@ -86,7 +88,7 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
     private var lastState: State? = null
 
     override fun init() {
-        Logger.info("Role: Leader initialized", IdeMetaData.getInstance(cluster.project))
+        logger.info("Role: Leader initialized")
         cluster.updateLeaderHeartbeat()
         publishCurrentState()
     }
@@ -99,9 +101,8 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
     override fun onHeartbeat() {
         super.onHeartbeat()
         if (!cluster.checkIfLeaderIsMe()) {
-            Logger.info(
-                "Leader: Found another leader or leader file missing, downgrading to Follower",
-                IdeMetaData.getInstance(cluster.project)
+            logger.info(
+                "Leader: Found another leader or leader file missing, downgrading to Follower"
             )
             cluster.becomeFollower()
         }
@@ -114,9 +115,11 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
         if (state != lastState) {
             Logger.info("State changed, publishing new state", IdeMetaData.getInstance(cluster.project))
             cluster.getStateService().publishState(state, cluster.getNodeId())
+            logger.info("State changed, publishing new state")
             lastState = state
         } else {
             // Logger.info("State unchanged, skipping publish", IdeMetaData.getInstance(cluster.project))
+            logger.info("State unchanged, skipping publish")
         }
     }
 }

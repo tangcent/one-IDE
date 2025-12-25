@@ -160,7 +160,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
      */
     fun applyState(state: State, onComplete: (() -> Unit) = {}) {
         applyStateDebouncer.debounce {
-            Logger.info("Applying state from ${state.source}", metaData)
+            logger.info("Applying state from ${state.source}")
             isApplyingState = true
 
             ApplicationManager.getApplication().invokeLater {
@@ -174,9 +174,8 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     // 1. Check intersection
                     // If the current project root has no relationship with the state root, we should not apply the state.
                     if (!StateHelper.hasIntersection(state, projectPathStr)) {
-                        Logger.info(
-                            "Skipping apply state: Project path $projectPathStr has no intersection with state root ${state.root.path}",
-                            metaData
+                        logger.info(
+                            "Skipping apply state: Project path $projectPathStr has no intersection with state root ${state.root.path}"
                         )
                         return@invokeLater
                     }
@@ -204,7 +203,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         val fileNorm = file.path.normalizePath()
                         val keep = filesToOpen.contains(fileNorm)
                         if (!keep) {
-                            Logger.info("Closing file: ${file.path}", metaData)
+                            logger.info("Closing file: ${file.path}")
                             fileEditorManager.closeFile(file)
                         }
                     }
@@ -217,7 +216,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         if (virtualFile != null) {
                             // 3.1 Open if need open
                             if (!fileEditorManager.isFileOpen(virtualFile)) {
-                                Logger.info("Opening file: $filePath", metaData)
+                                logger.info("Opening file: $filePath")
                                 fileEditorManager.openFile(virtualFile, false)
                             }
                         }
@@ -227,7 +226,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     if (activeFile != null) {
                         val virtualFile = localFileSystem.findFileByPath(activeFile.filePath)
                         if (virtualFile != null) {
-                            Logger.info("Activating file: ${activeFile.filePath}", metaData)
+                            logger.info("Activating file: ${activeFile.filePath}")
                             fileEditorManager.openFile(virtualFile, true)
 
                             val textEditor = fileEditorManager.getTextEditor(virtualFile)
@@ -236,9 +235,8 @@ class IdeConnector(private val project: Project, private val configService: Conf
                                 val scrollingModel = textEditor.editor.scrollingModel
 
                                 if (caretModel.logicalPosition.line != activeFile.cursor || caretModel.logicalPosition.column != activeFile.column) {
-                                    Logger.info(
-                                        "Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${activeFile.filePath}",
-                                        metaData
+                                    logger.info(
+                                        "Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${activeFile.filePath}"
                                     )
                                     caretModel.moveToLogicalPosition(
                                         com.intellij.openapi.editor.LogicalPosition(
@@ -249,13 +247,13 @@ class IdeConnector(private val project: Project, private val configService: Conf
                                     scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
                                 }
                             } else {
-                                Logger.warn("TextEditor is null for $virtualFile", metaData)
+                                logger.warn("TextEditor is null for $virtualFile")
                             }
                         }
                     }
 
                 } catch (e: Exception) {
-                    Logger.error("Error applying state", e, metaData)
+                    logger.error("Error applying state", e)
                 } finally {
                     isApplyingState = false
                     onComplete()

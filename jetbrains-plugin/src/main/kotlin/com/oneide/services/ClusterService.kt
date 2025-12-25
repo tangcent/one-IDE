@@ -31,6 +31,7 @@ class ClusterService(
     private val ideConnector: IdeConnector,
     private val stateService: StateService
 ) {
+    private val logger = Logger.withProject(project)
     private val clusterDir: File = File(oneIdeDir, "cluster")
 
     private var currentRole: IRole? = null
@@ -80,7 +81,7 @@ class ClusterService(
 
     private fun switchRole(newRole: IRole, type: Role) {
         currentRole?.dispose()
-        Logger.info("Switching role to $type", IdeMetaData.getInstance(project))
+        logger.info("Switching role to $type")
         roleType = type
         currentRole = newRole
         currentRole?.init()
@@ -113,7 +114,7 @@ class ClusterService(
             NodeInfo(id = nodeId, timestamp = System.currentTimeMillis(), lastHeartbeat = System.currentTimeMillis())
         try {
             leaderFile.writeText(mapper.writeValueAsString(info))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 

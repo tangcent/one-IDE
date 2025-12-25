@@ -18,6 +18,7 @@ import java.nio.file.Paths
 @Service(Service.Level.PROJECT)
 class SyncService(private val project: Project) : Disposable {
     val metaData = IdeMetaData.getInstance(project)
+    private val logger = Logger.withMetaData(metaData)
     private val oneIdeDir = Paths.get(System.getProperty("user.home"), ".one-ide")
 
     private val configService = ConfigService(oneIdeDir)
@@ -28,16 +29,16 @@ class SyncService(private val project: Project) : Disposable {
     var isEnabled: Boolean = true
         set(value) {
             field = value
-            Logger.info("One-IDE Sync enabled: $value", metaData)
+            logger.info("One-IDE Sync enabled: $value")
             updateAllStatusBars()
         }
 
     init {
-        Logger.info("One-IDE SyncService initialized. SourceID: ${metaData.id}", metaData)
+        logger.info("One-IDE SyncService initialized. SourceID: ${metaData.id}")
     }
 
     override fun dispose() {
-        Logger.info("Disposing SyncService for ${project.name}", metaData)
+        logger.info("Disposing SyncService for ${project.name}")
         configService.dispose()
         stateService.dispose()
         clusterService.dispose()

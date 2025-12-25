@@ -93,6 +93,7 @@ data class SyncState(
 class RuleService(private val project: Project) {
     private val debouncer = Debouncer(1000)
     private val currentAppName = ApplicationNamesInfo.getInstance().fullProductName
+    private val logger = Logger.withProject(project)
 
     /**
      * Starts the RuleService.
@@ -100,13 +101,12 @@ class RuleService(private val project: Project) {
      */
     fun start() {
         val syncService = SyncService.getInstance(project)
-        val metaData = syncService.metaData
         if (!syncService.getConfig().syncRules) {
-            Logger.info("AI Rule Sync is disabled.", metaData)
+            logger.info("AI Rule Sync is disabled.")
             return
         }
 
-        Logger.info("Starting RuleService for project: ${project.name}. App: $currentAppName", metaData)
+        logger.info("Starting RuleService for project: ${project.name}. App: $currentAppName")
 
         project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
             override fun after(events: List<VFileEvent>) {
@@ -167,7 +167,6 @@ class RuleService(private val project: Project) {
 
     private fun checkAndSync() {
         val syncService = SyncService.getInstance(project)
-        val metaData = syncService.metaData
         if (!syncService.getConfig().syncRules) return
 
         val basePath = project.basePath ?: return
@@ -202,7 +201,7 @@ class RuleService(private val project: Project) {
         // 4. Identify current AI tool
         val currentToolKey = detectCurrentTool(project)
         if (currentToolKey == null) {
-            Logger.info("Current IDE '$currentAppName' is not a known AI tool target. Skipping sync.", metaData)
+            logger.info("Current IDE '$currentAppName' is not a known AI tool target. Skipping sync.")
             return
         }
 
@@ -212,7 +211,7 @@ class RuleService(private val project: Project) {
 
         // Check locks
         if (isLocked(basePath, latest.first)) {
-            Logger.info("Sync ignored: Source ${latest.first} is currently locked.", metaData)
+            logger.info("Sync ignored: Source ${latest.first} is currently locked.")
             return
         }
 
@@ -228,8 +227,8 @@ class RuleService(private val project: Project) {
         }
 
         // 4. Sync
-        Logger.info("Latest rule modification: ${latest.first} - ${latest.second.name}", metaData)
-        Logger.info("Syncing rules from ${latest.first} to $currentToolKey...", metaData)
+        logger.info("Latest rule modification: ${latest.first} - ${latest.second.name}")
+        logger.info("Syncing rules from ${latest.first} to $currentToolKey...")
 
         if (tryAcquireLock(basePath, currentToolKey)) {
             try {
@@ -252,12 +251,12 @@ class RuleService(private val project: Project) {
                     }
                 }
             } catch (e: Exception) {
-                Logger.error("Sync failed", e, metaData)
+                logger.error("Sync failed", e)
             } finally {
                 releaseLock(basePath, currentToolKey)
             }
         } else {
-            Logger.info("Skipping sync: Could not acquire lock for $currentToolKey.")
+            logger.info("Skipping sync: Could not acquire lock for $currentToolKey.")
         }
     }
 
@@ -313,7 +312,7 @@ class RuleService(private val project: Project) {
             lockFile.writeText(System.currentTimeMillis().toString())
             return true
         } catch (e: Exception) {
-            Logger.error("Failed to acquire lock $lockFile", e)
+            logger.error("Failed to acquire lock $lockFile", e)
             return false
         }
     }
@@ -325,7 +324,7 @@ class RuleService(private val project: Project) {
                 lockFile.delete()
             }
         } catch (e: Exception) {
-            Logger.error("Failed to release lock $lockFile", e)
+            logger.error("Failed to release lock $lockFile", e)
         }
     }
 
@@ -339,83 +338,82 @@ class RuleService(private val project: Project) {
 
     private fun syncRules(sourceAi: String, targetAi: String, rootPath: String): Long {
         val syncService = SyncService.getInstance(project)
-        val metaData = syncService.metaData
         try {
             val aiTools = AITool.instance.getAllAIConfigs()
-        val sourceConfig = aiTools[sourceAi] ?: return 0L
-        val targetConfig = aiTools[targetAi] ?: return 0L
+            val sourceConfig = aiTools[sourceAi] ?: return 0L
+            val targetConfig = aiTools[targetAi] ?: return 0L
 
-        // Collect source contents
-        val sources = mutableListOf<RuleFile>()
-        collectRuleFiles(rootPath, sourceConfig, sourceFiles = sources)
+            // Collect source contents
+            val sources = mutableListOf<RuleFile>()
+            collectRuleFiles(rootPath, sourceConfig, sourceFiles = sources)
 
-        if (sources.isEmpty()) return 0L
+            if (sources.isEmpty()) return 0L
 
-        // Build rules
-        val builder = getRuleBuilder(targetConfig)
+            // Build rules
+            val builder = getRuleBuilder(targetConfig)
 
-        val ruleFiles = builder.buildRules(sources, sourceAi)
+            val ruleFiles = builder.buildRules(sources, sourceAi)
 
-        // Prepare revert map
-        val previousContents = mutableMapOf<String, String?>()
-        var maxWrittenMtime = 0L
+            // Prepare revert map
+            val previousContents = mutableMapOf<String, String?>()
+            var maxWrittenMtime = 0L
 
-        // We need to run write action on EDT
-        var anyChanged = false
-        ApplicationManager.getApplication().invokeAndWait {
-            WriteAction.run<Throwable> {
-                var changed = false
-                for (ruleFile in ruleFiles) {
-                    val targetFile = File(rootPath, ruleFile.path)
+            // We need to run write action on EDT
+            var anyChanged = false
+            ApplicationManager.getApplication().invokeAndWait {
+                WriteAction.run<Throwable> {
+                    var changed = false
+                    for (ruleFile in ruleFiles) {
+                        val targetFile = File(rootPath, ruleFile.path)
 
-                    val currentContent = if (targetFile.exists()) targetFile.readText() else null
-                    val newContent = ruleFile.content
-                    val newMtime = ruleFile.lastModified
+                        val currentContent = if (targetFile.exists()) targetFile.readText() else null
+                        val newContent = ruleFile.content
+                        val newMtime = ruleFile.lastModified
 
-                    if (currentContent != newContent || targetFile.lastModified() != newMtime) {
-                        previousContents[ruleFile.path] = currentContent
+                        if (currentContent != newContent || targetFile.lastModified() != newMtime) {
+                            previousContents[ruleFile.path] = currentContent
 
-                        try {
-                            // Using VFS to write
-                            val parentDir = targetFile.parentFile
-                            if (!parentDir.exists()) parentDir.mkdirs()
+                            try {
+                                // Using VFS to write
+                                val parentDir = targetFile.parentFile
+                                if (!parentDir.exists()) parentDir.mkdirs()
 
-                            val vTargetDir = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(parentDir)
+                                val vTargetDir = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(parentDir)
 
-                            if (vTargetDir != null) {
-                                val vFile = vTargetDir.findChild(targetFile.name) ?: vTargetDir.createChildData(
-                                    this,
-                                    targetFile.name
-                                )
-                                vFile.setBinaryContent(newContent.toByteArray())
-                                Logger.info("Updated ${targetFile.path}", metaData)
-                                changed = true
-                            } else {
-                                // Fallback to IO
-                                targetFile.writeText(newContent)
-                                targetFile.setLastModified(newMtime)
-                                Logger.info("Updated ${targetFile.path} (IO)", metaData)
-                                changed = true
+                                if (vTargetDir != null) {
+                                    val vFile = vTargetDir.findChild(targetFile.name) ?: vTargetDir.createChildData(
+                                        this,
+                                        targetFile.name
+                                    )
+                                    vFile.setBinaryContent(newContent.toByteArray())
+                                    logger.info("Updated ${targetFile.path}")
+                                    changed = true
+                                } else {
+                                    // Fallback to IO
+                                    targetFile.writeText(newContent)
+                                    targetFile.setLastModified(newMtime)
+                                    logger.info("Updated ${targetFile.path} (IO)")
+                                    changed = true
+                                }
+                                if (newMtime > maxWrittenMtime) maxWrittenMtime = newMtime
+                            } catch (e: Exception) {
+                                logger.error("Failed to write ${targetFile.path}", e)
                             }
+                        } else {
+                            // Content and mtime match, keep track of max time
                             if (newMtime > maxWrittenMtime) maxWrittenMtime = newMtime
-                        } catch (e: Exception) {
-                            Logger.error("Failed to write ${targetFile.path}", e, metaData)
                         }
-                    } else {
-                        // Content and mtime match, keep track of max time
-                        if (newMtime > maxWrittenMtime) maxWrittenMtime = newMtime
+                    }
+
+                    if (changed) {
+                        anyChanged = true
+                        showRevertNotification(rootPath, previousContents, targetAi)
                     }
                 }
-
-                if (changed) {
-                    anyChanged = true
-                    showRevertNotification(rootPath, previousContents, targetAi)
-                }
             }
-        }
             return if (anyChanged) maxWrittenMtime else 0L
         } catch (e: Exception) {
-            Logger.error("Error during syncRules", e, metaData)
+            logger.error("Error during syncRules", e)
             return 0L
         }
     }
@@ -436,7 +434,7 @@ class RuleService(private val project: Project) {
                     }
                 }
                 notification.expire()
-                Logger.info("Reverted changes for $targetAi")
+                logger.info("Reverted changes for $targetAi")
             }
         })
 
