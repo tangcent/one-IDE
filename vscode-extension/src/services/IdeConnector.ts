@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { State, FolderState, ActiveFile } from '../types';
+import { State, FolderState, ActiveFile, NodeInfo } from '../types';
 import { ConfigService } from './ConfigService';
 import { Logger } from '../logger';
 import { IdeMetaData } from '../IdeMetaData';
@@ -20,6 +20,8 @@ export class IdeConnector {
     private isApplyingState: boolean = false;
     // Debouncer for applying state (received from other IDEs) -> Inbound
     private applyStateDebouncer = new Debouncer(300);
+
+    private isShowingVersionWarning = false;
 
     constructor(configService: ConfigService) {
         this.configService = configService;
@@ -93,7 +95,7 @@ export class IdeConnector {
                 const fsPath = tab.input.uri.fsPath;
                 if (this.configService.shouldSyncFile(fsPath)) {
                     openedFiles.push(fsPath);
-                    
+
                     if (activePath && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activePath)) {
                         let cursor = 0;
                         let column = 0;
@@ -193,14 +195,14 @@ export class IdeConnector {
                         Logger.error(`Failed to sync file ${fsPath}:`, e);
                     }
                 }
-                
+
                 // 4. Activate file and move cursor
                 if (activeFile) {
                     try {
                         const fsPath = activeFile.filePath;
                         const uri = vscode.Uri.file(fsPath);
                         Logger.log(`Activating file: ${fsPath}`);
-                        
+
                         const doc = await vscode.workspace.openTextDocument(uri);
                         const editor = await vscode.window.showTextDocument(doc, {
                             preview: false,
@@ -217,7 +219,7 @@ export class IdeConnector {
                             }
                         }
                     } catch (e) {
-                         Logger.error(`Failed to activate file ${activeFile.filePath}:`, e);
+                        Logger.error(`Failed to activate file ${activeFile.filePath}:`, e);
                     }
                 }
 
@@ -227,6 +229,49 @@ export class IdeConnector {
                 this.isApplyingState = false;
             }
         });
+    }
+
+    public checkPluginVersion(remoteNode: NodeInfo | undefined) {
+        const remoteVersion = remoteNode?.pluginVersion;
+        const currentVersion = IdeMetaData.getInstance().pluginVersion;
+        if (remoteVersion !== currentVersion) {
+            if (this.isShowingVersionWarning) return;
+
+            const remoteIde = remoteNode?.ide ? ` (${remoteNode.ide})` : 'Other IDE';
+            const message = `One-IDE Plugin Version Mismatch. ${remoteIde}: ${remoteVersion}, Local: ${currentVersion}`;
+
+            // Simple semver comparison logic since we don't have semver package
+            // Assuming format x.y.z
+            const isRemoteNewer = remoteVersion != null && this.compareVersions(remoteVersion, currentVersion) > 0;
+
+            if (isRemoteNewer) {
+                this.isShowingVersionWarning = true;
+                vscode.window.showWarningMessage(message, 'Update Extension').then(selection => {
+                    this.isShowingVersionWarning = false;
+                    if (selection === 'Update Extension') {
+                        vscode.env.openExternal(vscode.Uri.parse('vscode:extension/tangcent.one-ide'));
+                    }
+                });
+            } else {
+                this.isShowingVersionWarning = true;
+                vscode.window.showWarningMessage(message).then(() => {
+                    this.isShowingVersionWarning = false;
+                });
+            }
+        }
+    }
+
+    private compareVersions(v1: string, v2: string): number {
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+            const num1 = parts1[i] || 0;
+            const num2 = parts2[i] || 0;
+            if (num1 > num2) return 1;
+            if (num1 < num2) return -1;
+        }
+        return 0;
     }
 
     private getTextEditor(fsPath: string): vscode.TextEditor | undefined {

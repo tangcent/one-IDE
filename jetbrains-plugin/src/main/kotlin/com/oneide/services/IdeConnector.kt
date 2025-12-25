@@ -7,17 +7,27 @@ import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.wm.WindowManager
 import com.oneide.models.ActiveFile
 import com.oneide.models.IdeMetaData
 import com.oneide.models.State
+import com.oneide.models.NodeInfo
 import com.oneide.utils.Debouncer
 import com.oneide.utils.Logger
 import com.oneide.utils.StateHelper
-import com.oneide.utils.StateHelper.normalizePath
 import java.nio.file.Paths
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.options.ShowSettingsUtil
+import com.intellij.openapi.wm.WindowManager
+import com.oneide.utils.StateHelper.normalizePath
+import kotlin.math.log
 
 /**
  * Service responsible for connecting the IDE events with the synchronization logic.
@@ -25,6 +35,7 @@ import java.nio.file.Paths
  */
 class IdeConnector(private val project: Project, private val configService: ConfigService) {
     private val metaData = IdeMetaData.getInstance(project)
+    private val logger = Logger.withMetaData(metaData)
 
     // Callback to be invoked when user activity is detected
     private var onUserActivityCallback: (() -> Unit)? = null
@@ -37,6 +48,8 @@ class IdeConnector(private val project: Project, private val configService: Conf
 
     // Debouncer for applying state (received from other IDEs) -> Inbound
     internal var applyStateDebouncer = Debouncer(300)
+
+    private var activeNotification: Notification? = null
 
     init {
         setupListeners()
@@ -259,6 +272,47 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     onComplete()
                 }
             }
+        }
+    }
+
+    fun checkPluginVersion(remoteNode: NodeInfo?) {
+        val remoteVersion = remoteNode?.pluginVersion
+        val currentVersion = metaData.pluginVersion
+
+        if (remoteVersion != currentVersion) {
+            if (activeNotification?.isExpired == false) {
+                return
+            }
+
+            val remoteIde = if (remoteNode?.ide != null) " (${remoteNode.ide})" else "Other IDE"
+            logger.info("Plugin version mismatch, remote: $remoteVersion$remoteIde, local: $currentVersion")
+
+            val title = "One-IDE Plugin Version Mismatch"
+            val content = "$remoteIde: $remoteVersion, Local: $currentVersion"
+
+            val notification = NotificationGroupManager.getInstance()
+                .getNotificationGroup("OneIDE Notification Group")
+                .createNotification(title, content, NotificationType.WARNING)
+
+            if (StringUtil.compareVersionNumbers(remoteVersion, currentVersion) > 0) {
+                notification.addAction(object : AnAction("Update Plugin") {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        try {
+                            ShowSettingsUtil.getInstance().showSettingsDialog(project, "Plugins")
+                        } catch (e: Exception) {
+                            BrowserUtil.browse("https://plugins.jetbrains.com/plugin/23842-one-ide")
+                        }
+                        notification.expire()
+                    }
+                })
+            }
+            activeNotification = notification
+            notification.whenExpired {
+                if (activeNotification == notification) {
+                    activeNotification = null
+                }
+            }
+            notification.notify(project)
         }
     }
 

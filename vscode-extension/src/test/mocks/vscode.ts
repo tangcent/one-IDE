@@ -35,6 +35,13 @@ export const window = {
 export const env = {
     appName: 'VSCode'
 };
+export const extensions = {
+    getExtension: (id: string) => ({
+        packageJSON: {
+            version: '1.0.0'
+        }
+    })
+};
 export enum StatusBarAlignment { Left, Right }
 export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }
 export class TabInputText {

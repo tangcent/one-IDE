@@ -34,12 +34,12 @@ export class ClusterService {
     private oneIdeDir: string;
     private clusterDir: string;
     private nodeId: string;
-    
+
     private currentRole: IRole | null = null
     private roleType: RoleType = RoleType.FOLLOWER;
-    
+
     private heartbeatInterval: NodeJS.Timeout | null = null;
-    
+
     // File paths
     private leaderFile: string;
 
@@ -49,11 +49,11 @@ export class ClusterService {
     ) {
         this.oneIdeDir = path.join(os.homedir(), '.one-ide');
         this.clusterDir = path.join(this.oneIdeDir, 'cluster');
-        
+
         if (!fs.existsSync(this.clusterDir)) {
             fs.mkdirSync(this.clusterDir, { recursive: true });
         }
-        
+
         this.nodeId = IdeMetaData.getInstance().id;
 
         this.leaderFile = path.join(this.clusterDir, 'leader.json');
@@ -65,9 +65,9 @@ export class ClusterService {
         // Setup dependencies
         this.ideConnector.setOnUserActivity(() => this.onUserActivity());
         this.stateService.setOnStateReceived((state) => this.onStateReceived(state));
-        
+
         this.startHeartbeat();
-        
+
         // Start as Follower
         await this.becomeFollower();
     }
@@ -76,13 +76,13 @@ export class ClusterService {
 
     public async becomeFollower() {
         if (this.roleType === RoleType.FOLLOWER && this.currentRole) return;
-        
+
         await this.switchRole(new Follower(this), RoleType.FOLLOWER);
     }
 
     public async becomeCandidate() {
         if (this.roleType === RoleType.CANDIDATE && this.currentRole) return;
-        
+
         await this.switchRole(new Candidate(this), RoleType.CANDIDATE);
     }
 
@@ -112,7 +112,7 @@ export class ClusterService {
 
     private async onStateReceived(state: State) {
         if (this.roleType === RoleType.FOLLOWER) {
-             await this.ideConnector.applyState(state);
+            await this.ideConnector.applyState(state);
         }
     }
 
@@ -134,9 +134,23 @@ export class ClusterService {
         const info: NodeInfo = {
             id: this.nodeId,
             timestamp: Date.now(),
-            lastHeartbeat: Date.now()
+            lastHeartbeat: Date.now(),
+            pluginVersion: IdeMetaData.getInstance().pluginVersion,
+            ide: IdeMetaData.getInstance().appName
         };
         fs.writeFileSync(this.leaderFile, JSON.stringify(info));
+    }
+
+    public getLeaderInfo(): NodeInfo | null {
+        if (!fs.existsSync(this.leaderFile)) return null;
+        try {
+            const content = fs.readFileSync(this.leaderFile, 'utf-8');
+            const info = JSON.parse(content) as NodeInfo;
+            if (!this.isHealthy(info)) return null;
+            return info;
+        } catch (e) {
+            return null;
+        }
     }
 
     public checkLeaderHealth(): boolean {
@@ -144,13 +158,14 @@ export class ClusterService {
         try {
             const content = fs.readFileSync(this.leaderFile, 'utf-8');
             const info = JSON.parse(content) as NodeInfo;
-            if (Date.now() - info.timestamp > ClusterConstants.LEADER_TIMEOUT) {
-                return false;
-            }
-            return true;
+            return this.isHealthy(info);
         } catch (e) {
             return false;
         }
+    }
+
+    private isHealthy(info: NodeInfo): boolean {
+        return info.lastHeartbeat !== undefined && Date.now() - info.lastHeartbeat < ClusterConstants.LEADER_TIMEOUT;
     }
 
     public checkIfLeaderIsMe(): boolean {
@@ -223,7 +238,7 @@ export class ClusterService {
         if (this.currentRole) {
             this.currentRole.dispose();
         }
-        
+
         // Cleanup my node directory
         try {
             // No node directory to cleanup

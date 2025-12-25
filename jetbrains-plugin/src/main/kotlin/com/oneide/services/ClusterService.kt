@@ -110,11 +110,28 @@ class ClusterService(
     }
 
     fun updateLeaderHeartbeat() {
+        val pluginVersion = IdeMetaData.getInstance(project).pluginVersion
         val info =
-            NodeInfo(id = nodeId, timestamp = System.currentTimeMillis(), lastHeartbeat = System.currentTimeMillis())
+            NodeInfo(
+                id = nodeId,
+                timestamp = System.currentTimeMillis(),
+                lastHeartbeat = System.currentTimeMillis(),
+                pluginVersion = pluginVersion,
+                ide = IdeMetaData.getInstance(project).ide
+            )
         try {
             leaderFile.writeText(mapper.writeValueAsString(info))
         } catch (_: Exception) {
+        }
+    }
+
+    fun getLeaderInfo(): NodeInfo? {
+        if (!leaderFile.exists()) return null
+        return try {
+            val info: NodeInfo = mapper.readValue(leaderFile)
+            info.takeIf { it.isHealthy() }
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -122,10 +139,14 @@ class ClusterService(
         if (!leaderFile.exists()) return false
         return try {
             val info: NodeInfo = mapper.readValue(leaderFile)
-            System.currentTimeMillis() - info.timestamp <= ClusterConstants.LEADER_TIMEOUT
+            info.isHealthy()
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun NodeInfo.isHealthy(): Boolean {
+        return System.currentTimeMillis() - lastHeartbeat <= ClusterConstants.LEADER_TIMEOUT
     }
 
     fun checkIfLeaderIsMe(): Boolean {

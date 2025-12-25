@@ -3,12 +3,15 @@ package com.oneide.models
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.ide.plugins.PluginManagerCore
+import com.intellij.openapi.extensions.PluginId
 import kotlin.random.Random
 
 @Service(Service.Level.PROJECT)
 class IdeMetaData(private val project: Project) {
     val id: String = generateRandomId()
     val ide: String = ApplicationNamesInfo.getInstance().fullProductName
+    val pluginVersion: String = PluginManagerCore.getPlugin(PluginId.getId("com.itangcent.oneide"))?.version ?: "Unknown"
 
     @Volatile
     var lastCheckPoint: Long = 0

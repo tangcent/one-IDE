@@ -37,7 +37,9 @@ enum class Role {
 data class NodeInfo(
     val id: String = "",
     val timestamp: Long = 0,
-    val lastHeartbeat: Long = 0
+    val lastHeartbeat: Long = 0,
+    val pluginVersion: String? = null,
+    val ide: String? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)

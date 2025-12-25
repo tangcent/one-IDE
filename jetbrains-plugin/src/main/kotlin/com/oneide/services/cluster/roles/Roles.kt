@@ -4,6 +4,7 @@ import com.oneide.models.IdeMetaData
 import com.oneide.models.State
 import com.oneide.services.ClusterService
 import com.oneide.utils.Logger
+import com.oneide.models.NodeInfo
 
 interface IRole {
     fun init()
@@ -30,6 +31,8 @@ abstract class BaseRole(protected val cluster: ClusterService) : IRole {
 }
 
 class Follower(cluster: ClusterService) : BaseRole(cluster) {
+    private var lastLeaderId: String? = null
+
     override fun init() {
         logger.info("Role: Follower initialized")
         cluster.getStateService().startWatching()
@@ -49,6 +52,14 @@ class Follower(cluster: ClusterService) : BaseRole(cluster) {
         }
     }
 
+    override fun onHeartbeat() {
+        super.onHeartbeat()
+        val leaderInfo = cluster.getLeaderInfo()
+        if (leaderInfo != null && leaderInfo.id != lastLeaderId) {
+            cluster.getIdeConnector().checkPluginVersion(leaderInfo)
+            lastLeaderId = leaderInfo.id
+        }
+    }
 }
 
 class Candidate(cluster: ClusterService) : BaseRole(cluster) {

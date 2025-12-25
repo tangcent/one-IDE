@@ -31,6 +31,8 @@ export interface NodeInfo {
     id: string;
     timestamp: number;
     lastHeartbeat?: number;
+    pluginVersion?: string;
+    ide?: string;
 }
 
 export interface ClusterState {
