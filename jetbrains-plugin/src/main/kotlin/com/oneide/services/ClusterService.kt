@@ -32,26 +32,19 @@ class ClusterService(
     private val stateService: StateService
 ) {
     private val clusterDir: File = File(oneIdeDir, "cluster")
-    private val nodesDir: File = File(oneIdeDir, "nodes")
 
     private var currentRole: IRole? = null
     private var roleType: Role = Role.FOLLOWER
 
     private val leaderFile: File
-    private val myHeartbeatFile: File
 
     private val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
     private val mapper = jacksonObjectMapper()
 
     init {
         if (!clusterDir.exists()) clusterDir.mkdirs()
-        if (!nodesDir.exists()) nodesDir.mkdirs()
-
-        val nodeDir = File(nodesDir, nodeId)
-        if (!nodeDir.exists()) nodeDir.mkdirs()
 
         leaderFile = File(clusterDir, "leader.json")
-        myHeartbeatFile = File(nodeDir, "heartbeat.json")
 
         // Setup dependencies
         ideConnector.setOnUserActivity { onUserActivity() }
@@ -115,14 +108,6 @@ class ClusterService(
         }, 0, ClusterConstants.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS)
     }
 
-    fun updateNodeHeartbeat() {
-        val info = NodeInfo(id = nodeId, timestamp = System.currentTimeMillis())
-        try {
-            myHeartbeatFile.writeText(mapper.writeValueAsString(info))
-        } catch (e: Exception) {
-        }
-    }
-
     fun updateLeaderHeartbeat() {
         val info =
             NodeInfo(id = nodeId, timestamp = System.currentTimeMillis(), lastHeartbeat = System.currentTimeMillis())
@@ -170,7 +155,7 @@ class ClusterService(
     private fun acquireLock(lockDir: File): Boolean {
         try {
             return lockDir.mkdir()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             try {
                 if (System.currentTimeMillis() - lockDir.lastModified() > ClusterConstants.LOCK_STALE_TIMEOUT) {
                     lockDir.delete()

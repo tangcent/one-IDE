@@ -33,18 +33,15 @@ export enum RoleType {
 export class ClusterService {
     private oneIdeDir: string;
     private clusterDir: string;
-    private nodesDir: string;
     private nodeId: string;
-    private myNodeDir!: string;
     
-    private currentRole: IRole | null = null;
+    private currentRole: IRole | null = null
     private roleType: RoleType = RoleType.FOLLOWER;
     
     private heartbeatInterval: NodeJS.Timeout | null = null;
     
     // File paths
     private leaderFile: string;
-    private myHeartbeatFile: string;
 
     constructor(
         private ideConnector: IdeConnector,
@@ -52,20 +49,14 @@ export class ClusterService {
     ) {
         this.oneIdeDir = path.join(os.homedir(), '.one-ide');
         this.clusterDir = path.join(this.oneIdeDir, 'cluster');
-        this.nodesDir = path.join(this.oneIdeDir, 'nodes');
         
         if (!fs.existsSync(this.clusterDir)) {
             fs.mkdirSync(this.clusterDir, { recursive: true });
         }
         
         this.nodeId = IdeMetaData.getInstance().id;
-        const nodeDir = path.join(this.nodesDir, this.nodeId);
-        if (!fs.existsSync(nodeDir)) {
-            fs.mkdirSync(nodeDir, { recursive: true });
-        }
 
         this.leaderFile = path.join(this.clusterDir, 'leader.json');
-        this.myHeartbeatFile = path.join(nodeDir, 'heartbeat.json');
 
         this.init();
     }
@@ -137,14 +128,6 @@ export class ClusterService {
 
     public getNodeId() {
         return this.nodeId;
-    }
-
-    public updateNodeHeartbeat() {
-        const info: NodeInfo = {
-            id: this.nodeId,
-            timestamp: Date.now()
-        };
-        fs.writeFileSync(this.myHeartbeatFile, JSON.stringify(info));
     }
 
     public updateLeaderHeartbeat() {
@@ -243,9 +226,7 @@ export class ClusterService {
         
         // Cleanup my node directory
         try {
-            if (fs.existsSync(this.myNodeDir)) {
-                fs.rmSync(this.myNodeDir, { recursive: true, force: true });
-            }
+            // No node directory to cleanup
         } catch (e) {
             Logger.error('Failed to cleanup node directory', e);
         }

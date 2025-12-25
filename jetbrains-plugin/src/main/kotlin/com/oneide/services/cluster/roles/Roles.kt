@@ -22,7 +22,7 @@ abstract class BaseRole(protected val cluster: ClusterService) : IRole {
     }
 
     override fun onHeartbeat() {
-        cluster.updateNodeHeartbeat()
+        // Default: do nothing
     }
 }
 

@@ -21,7 +21,6 @@ export abstract class BaseRole implements IRole {
     }
 
     async onHeartbeat(): Promise<void> {
-        // Default: update node heartbeat
-        this.cluster.updateNodeHeartbeat();
+        // Default: do nothing
     }
 }
