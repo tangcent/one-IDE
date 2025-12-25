@@ -1,5 +1,6 @@
 package com.oneide.services
 
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.oneide.models.ClusterState
@@ -122,6 +123,9 @@ class StateService(
                 metaData.lastCheckPoint = clusterState.timestamp
                 onStateReceivedCallback?.invoke(clusterState.state)
             }
+        } catch (e: MismatchedInputException) {
+            Logger.warn("State file format mismatch, ignoring...", null, metaData)
+            // Optional: delete or backup the file if needed, but for now just ignore
         } catch (e: Exception) {
             if (retries > 0) {
                 // Retry after a short delay if the file is being written

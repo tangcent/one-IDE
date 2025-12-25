@@ -1,6 +1,6 @@
 package com.oneide.utils
 
-import com.oneide.models.FileState
+import com.oneide.models.ActiveFile
 import com.oneide.models.FolderState
 import com.oneide.models.State
 import com.oneide.models.IdeMetaData
@@ -17,34 +17,35 @@ object StateHelper {
      *
      * @param metaData The metadata of the current IDE instance
      * @param rootPath The root path of the workspace
-     * @param openedFiles List of opened files with their cursor/selection info
-     * @param activePath The currently active file path
+     * @param openedFiles List of opened file paths
+     * @param activeFile The currently active file with cursor info
      * @return A State object
      */
     fun buildState(
         metaData: IdeMetaData,
         rootPath: String,
-        openedFiles: List<FileState>,
-        activePath: String?
+        openedFiles: List<String>,
+        activeFile: ActiveFile?
     ): State {
         val rootPathLower = rootPath.normalizePath()
-        val activePathLower = activePath?.normalizePath()
 
-        val fileStates = openedFiles
-            .filter { it.filePath.normalizePath().startsWith(rootPathLower) }
-            .map { f ->
-                val fsPathLower = f.filePath.normalizePath()
-                FileState(
-                    filePath = fsPathLower,
-                    cursor = f.cursor,
-                    column = f.column,
-                    isActive = fsPathLower == activePathLower
-                )
-            }.toMutableList()
+        val filePaths = openedFiles
+            .filter { it.normalizePath().startsWith(rootPathLower) }
+            .map { it.normalizePath() }
+            .toMutableList()
+
+        var activeFileInRoot: ActiveFile? = null
+        if (activeFile != null) {
+            val activePathLower = activeFile.filePath.normalizePath()
+            if (activePathLower.startsWith(rootPathLower)) {
+                activeFileInRoot = activeFile.copy(filePath = activePathLower)
+            }
+        }
 
         val rootNode = FolderState(
             path = rootPathLower,
-            openedFiles = fileStates
+            openedFiles = filePaths,
+            activeFile = activeFileInRoot
         )
 
         return State(
@@ -60,15 +61,32 @@ object StateHelper {
      *
      * @param state The state object
      * @param rootPath The root path of the current workspace
-     * @return List of FileState objects
+     * @return List of file paths
      */
-    fun getFiles(state: State, rootPath: String): List<FileState> {
+    fun getFiles(state: State, rootPath: String): List<String> {
         val normalizedRootPath = rootPath.normalizePath()
 
         return state.root.openedFiles.filter { f ->
-            val fPath = f.filePath.normalizePath()
+            val fPath = f.normalizePath()
             fPath.startsWith(normalizedRootPath)
         }
+    }
+
+    /**
+     * Extracts the active file from the state if it belongs to the given root path.
+     *
+     * @param state The state object
+     * @param rootPath The root path of the current workspace
+     * @return The active file or null
+     */
+    fun getActiveFile(state: State, rootPath: String): ActiveFile? {
+        val normalizedRootPath = rootPath.normalizePath()
+        val active = state.root.activeFile ?: return null
+
+        if (active.filePath.normalizePath().startsWith(normalizedRootPath)) {
+            return active
+        }
+        return null
     }
 
     /**
@@ -115,5 +133,5 @@ object StateHelper {
      *
      * @return The normalized file path
      */
-    private fun String.normalizePath() = Paths.get(this).toAbsolutePath().normalize().toString().lowercase()
+    fun String.normalizePath() = Paths.get(this).toAbsolutePath().normalize().toString().lowercase()
 }

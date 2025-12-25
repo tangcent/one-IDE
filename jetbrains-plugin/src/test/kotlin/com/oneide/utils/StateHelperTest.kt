@@ -1,7 +1,7 @@
 package com.oneide.utils
 
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import com.oneide.models.FileState
+import com.oneide.models.ActiveFile
 import com.oneide.models.FolderState
 import com.oneide.models.IdeMetaData
 import com.oneide.models.State
@@ -24,41 +24,44 @@ class StateHelperTest : BasePlatformTestCase() {
     fun `test buildState builds a flat state with normalized paths`() {
         val rootPath = "/User/Project"
         val openedFiles = listOf(
-            FileState(filePath = "/User/Project/src/main.kt", cursor = 10, column = 5),
-            FileState(filePath = "/User/Project/README.md", cursor = 0, column = 0)
+            "/User/Project/src/main.kt",
+            "/User/Project/README.md"
         )
-        val activePath = "/User/Project/src/main.kt"
+        val activeFile = ActiveFile(filePath = "/User/Project/src/main.kt", cursor = 10, column = 5)
 
-        val state = StateHelper.buildState(metaData, rootPath, openedFiles, activePath)
+        val state = StateHelper.buildState(metaData, rootPath, openedFiles, activeFile)
 
         val rootPathLower = Paths.get(rootPath).toAbsolutePath().normalize().toString().lowercase()
         assertEquals(rootPathLower, state.root.path)
         assertEquals(2, state.root.openedFiles.size)
 
-        val file1 = state.root.openedFiles.find { it.filePath.endsWith("main.kt") }
+        val file1 = state.root.openedFiles.find { it.endsWith("main.kt") }
         assertNotNull(file1)
-        assertTrue(file1!!.isActive)
         val expectedPath1 = Paths.get("/User/Project/src/main.kt").toAbsolutePath().normalize().toString().lowercase()
-        assertEquals(expectedPath1, file1.filePath)
+        assertEquals(expectedPath1, file1)
 
-        val file2 = state.root.openedFiles.find { it.filePath.endsWith("readme.md") }
+        val file2 = state.root.openedFiles.find { it.endsWith("readme.md") }
         assertNotNull(file2)
-        assertFalse(file2!!.isActive)
         val expectedPath2 = Paths.get("/User/Project/README.md").toAbsolutePath().normalize().toString().lowercase()
-        assertEquals(expectedPath2, file2.filePath)
+        assertEquals(expectedPath2, file2)
+        
+        val active = state.root.activeFile
+        assertNotNull(active)
+        assertEquals(expectedPath1, active!!.filePath)
+        assertEquals(10, active.cursor)
     }
 
     @Test
     fun `test buildState filters out files outside of root`() {
         val rootPath = "/User/Project"
         val openedFiles = listOf(
-            FileState(filePath = "/User/Project/in.kt", cursor = 0),
-            FileState(filePath = "/User/Other/out.kt", cursor = 0)
+            "/User/Project/in.kt",
+            "/User/Other/out.kt"
         )
 
         val state = StateHelper.buildState(metaData, rootPath, openedFiles, null)
         assertEquals(1, state.root.openedFiles.size)
-        assertTrue(state.root.openedFiles[0].filePath.contains("in.kt"))
+        assertTrue(state.root.openedFiles[0].contains("in.kt"))
     }
 
     @Test
@@ -73,23 +76,19 @@ class StateHelperTest : BasePlatformTestCase() {
             root = FolderState(
                 path = rootPathLower,
                 openedFiles = mutableListOf(
-                    FileState(
-                        filePath = Paths.get("/User/Project/file1.kt").toAbsolutePath().normalize().toString().lowercase(),
-                        cursor = 0,
-                        isActive = true
-                    ),
-                    FileState(
-                        filePath = Paths.get("/User/Other/file2.kt").toAbsolutePath().normalize().toString().lowercase(),
-                        cursor = 0,
-                        isActive = false
-                    )
+                    Paths.get("/User/Project/file1.kt").toAbsolutePath().normalize().toString().lowercase(),
+                    Paths.get("/User/Other/file2.kt").toAbsolutePath().normalize().toString().lowercase()
+                ),
+                activeFile = ActiveFile(
+                     filePath = Paths.get("/User/Project/file1.kt").toAbsolutePath().normalize().toString().lowercase(),
+                     cursor = 0
                 )
             )
         )
 
         val files = StateHelper.getFiles(state, rootPath)
         assertEquals(1, files.size)
-        assertTrue(files[0].filePath.endsWith("file1.kt"))
+        assertTrue(files[0].endsWith("file1.kt"))
     }
 
     @Test

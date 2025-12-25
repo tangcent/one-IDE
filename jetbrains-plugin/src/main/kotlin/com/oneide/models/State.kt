@@ -5,18 +5,18 @@ import com.fasterxml.jackson.annotation.JsonInclude
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class FileState(
+data class ActiveFile(
     val filePath: String = "",
     val cursor: Int = 0,
-    val column: Int = 0,
-    val isActive: Boolean = false
+    val column: Int = 0
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class FolderState(
     val path: String = "",
-    val openedFiles: MutableList<FileState> = mutableListOf()
+    val openedFiles: MutableList<String> = mutableListOf(),
+    val activeFile: ActiveFile? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)

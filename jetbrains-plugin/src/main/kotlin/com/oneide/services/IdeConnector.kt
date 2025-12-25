@@ -10,12 +10,13 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.WindowManager
-import com.oneide.models.FileState
+import com.oneide.models.ActiveFile
 import com.oneide.models.IdeMetaData
 import com.oneide.models.State
 import com.oneide.utils.Debouncer
 import com.oneide.utils.Logger
 import com.oneide.utils.StateHelper
+import com.oneide.utils.StateHelper.normalizePath
 import java.nio.file.Paths
 
 /**
@@ -24,16 +25,16 @@ import java.nio.file.Paths
  */
 class IdeConnector(private val project: Project, private val configService: ConfigService) {
     private val metaData = IdeMetaData.getInstance(project)
-    
+
     // Callback to be invoked when user activity is detected
     private var onUserActivityCallback: (() -> Unit)? = null
-    
+
     // Flag to prevent triggering activity while applying state from external source
     private var isApplyingState = false
-    
+
     // Debouncer for user activity (typing, selection changes) -> Outbound
     private val debouncer = Debouncer(300)
-    
+
     // Debouncer for applying state (received from other IDEs) -> Inbound
     internal var applyStateDebouncer = Debouncer(300)
 
@@ -127,26 +128,30 @@ class IdeConnector(private val project: Project, private val configService: Conf
         val selectedFiles = fileEditorManager.selectedFiles
         val activePath = if (selectedFiles.isNotEmpty()) selectedFiles[0].path else null
 
-        val openedFilesList = mutableListOf<FileState>()
+        val openedFilesList = mutableListOf<String>()
+        var activeFile: ActiveFile? = null
 
         for (file in openFiles) {
             val path = file.path
             if (!configService.shouldSyncFile(path)) continue
 
-            // Get cursor
-            var cursor = 0
-            var column = 0
-            val editor = fileEditorManager.getSelectedEditor(file)
-            if (editor is TextEditor) {
-                val logicalPosition = editor.editor.caretModel.logicalPosition
-                cursor = logicalPosition.line
-                column = logicalPosition.column
-            }
+            openedFilesList.add(path)
 
-            openedFilesList.add(FileState(filePath = path, cursor = cursor, column = column))
+            if (path == activePath) {
+                // Get cursor for active file
+                var cursor = 0
+                var column = 0
+                val editor = fileEditorManager.getSelectedEditor(file)
+                if (editor is TextEditor) {
+                    val logicalPosition = editor.editor.caretModel.logicalPosition
+                    cursor = logicalPosition.line
+                    column = logicalPosition.column
+                }
+                activeFile = ActiveFile(filePath = path, cursor = cursor, column = column)
+            }
         }
 
-        return StateHelper.buildState(metaData, rootPath, openedFilesList, activePath)
+        return StateHelper.buildState(metaData, rootPath, openedFilesList, activeFile)
     }
 
     /**
@@ -159,10 +164,10 @@ class IdeConnector(private val project: Project, private val configService: Conf
             isApplyingState = true
 
             ApplicationManager.getApplication().invokeLater {
-                    try {
-                        if (project.isDisposed) return@invokeLater
+                try {
+                    if (project.isDisposed) return@invokeLater
 
-                        val basePath = project.basePath ?: return@invokeLater
+                    val basePath = project.basePath ?: return@invokeLater
                     val projectPath = Paths.get(basePath).toAbsolutePath().normalize()
                     val projectPathStr = projectPath.toString().lowercase()
 
@@ -177,6 +182,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     }
 
                     val filesToOpen = StateHelper.getFiles(state, projectPathStr)
+                    val activeFile = StateHelper.getActiveFile(state, projectPathStr)
 
                     val fileEditorManager = FileEditorManager.getInstance(project)
 
@@ -187,14 +193,16 @@ class IdeConnector(private val project: Project, private val configService: Conf
                         // Check if file belongs to current project root AND the incoming state's scope
                         // If the file is outside the scope of the incoming state (e.g. syncing a subfolder),
                         // we should not close it as the incoming state has no authority over it.
-                        if (!StateHelper.isInsideRoot(projectPathStr, file.path) || !StateHelper.checkPathBelongsToState(state, file.path)) {
+                        if (!StateHelper.isInsideRoot(
+                                projectPathStr,
+                                file.path
+                            ) || !StateHelper.checkPathBelongsToState(state, file.path)
+                        ) {
                             continue
                         }
 
-                        val keep = filesToOpen.any {
-                            Paths.get(it.filePath).toAbsolutePath().normalize().toString()
-                                .lowercase() == Paths.get(file.path).toAbsolutePath().normalize().toString().lowercase()
-                        }
+                        val fileNorm = file.path.normalizePath()
+                        val keep = filesToOpen.contains(fileNorm)
                         if (!keep) {
                             Logger.info("Closing file: ${file.path}", metaData)
                             fileEditorManager.closeFile(file)
@@ -204,36 +212,44 @@ class IdeConnector(private val project: Project, private val configService: Conf
                     // 3. Open or Update files
                     // Iterate through files in the state and open/activate/scroll them.
                     val localFileSystem = LocalFileSystem.getInstance()
-                    for (fileState in filesToOpen) {
-                        val virtualFile = localFileSystem.findFileByPath(fileState.filePath)
+                    for (filePath in filesToOpen) {
+                        val virtualFile = localFileSystem.findFileByPath(filePath)
                         if (virtualFile != null) {
                             // 3.1 Open if need open
-                            if (!fileEditorManager.isFileOpen(virtualFile) || fileState.isActive) {
-                                Logger.info("Opening file: ${fileState.filePath}", metaData)
-                                fileEditorManager.openFile(virtualFile, fileState.isActive)
+                            if (!fileEditorManager.isFileOpen(virtualFile)) {
+                                Logger.info("Opening file: $filePath", metaData)
+                                fileEditorManager.openFile(virtualFile, false)
                             }
+                        }
+                    }
 
-                            // 3.2 Move caret if need move
-                            if (fileState.cursor >= 0) {
-                                val textEditor = fileEditorManager.getTextEditor(virtualFile)
-                                if (textEditor != null) {
-                                    val caretModel = textEditor.editor.caretModel
-                                    val scrollingModel = textEditor.editor.scrollingModel
+                    // 4. Activate file and move cursor
+                    if (activeFile != null) {
+                        val virtualFile = localFileSystem.findFileByPath(activeFile.filePath)
+                        if (virtualFile != null) {
+                            Logger.info("Activating file: ${activeFile.filePath}", metaData)
+                            fileEditorManager.openFile(virtualFile, true)
 
-                                    if (caretModel.logicalPosition.line != fileState.cursor || caretModel.logicalPosition.column != fileState.column) {
-                                        Logger.info(
-                                            "Moving cursor to ${fileState.cursor}:${fileState.column} in ${fileState.filePath}",
-                                            metaData
+                            val textEditor = fileEditorManager.getTextEditor(virtualFile)
+                            if (textEditor != null) {
+                                val caretModel = textEditor.editor.caretModel
+                                val scrollingModel = textEditor.editor.scrollingModel
+
+                                if (caretModel.logicalPosition.line != activeFile.cursor || caretModel.logicalPosition.column != activeFile.column) {
+                                    Logger.info(
+                                        "Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${activeFile.filePath}",
+                                        metaData
+                                    )
+                                    caretModel.moveToLogicalPosition(
+                                        com.intellij.openapi.editor.LogicalPosition(
+                                            activeFile.cursor,
+                                            activeFile.column
                                         )
-                                        caretModel.moveToLogicalPosition(
-                                            com.intellij.openapi.editor.LogicalPosition(
-                                                fileState.cursor,
-                                                fileState.column
-                                            )
-                                        )
-                                        scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
-                                    }
+                                    )
+                                    scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
                                 }
+                            } else {
+                                Logger.warn("TextEditor is null for $virtualFile", metaData)
                             }
                         }
                     }

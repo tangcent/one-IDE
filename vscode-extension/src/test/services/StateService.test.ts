@@ -56,9 +56,14 @@ describe('StateService', () => {
             root: {
                 path: '/root',
                 openedFiles: [
-                    { filePath: 'file1', cursor: 0, column: 0, isActive: false },
-                    { filePath: 'file2', cursor: 10, column: 5, isActive: true }
+                    'file1',
+                    'file2'
                 ],
+                activeFile: {
+                    filePath: 'file2',
+                    cursor: 10,
+                    column: 5
+                }
             }
         };
 
@@ -83,17 +88,13 @@ describe('StateService', () => {
                 
                 // Check file1
                 const file1 = json.state.root.openedFiles[0];
-                assert.strictEqual(file1.filePath, 'file1');
-                assert.strictEqual(file1.cursor, 0);
-                assert.strictEqual(file1.column, 0);
-                assert.strictEqual(file1.isActive, false);
+                assert.strictEqual(file1, 'file1');
                 
-                // Check file2
-                const file2 = json.state.root.openedFiles[1];
-                assert.strictEqual(file2.filePath, 'file2');
-                assert.strictEqual(file2.cursor, 10);
-                assert.strictEqual(file2.column, 5);
-                assert.strictEqual(file2.isActive, true);
+                // Check activeFile
+                const active = json.state.root.activeFile;
+                assert.strictEqual(active.filePath, 'file2');
+                assert.strictEqual(active.cursor, 10);
+                assert.strictEqual(active.column, 5);
                 
                 done();
             } catch (e) {

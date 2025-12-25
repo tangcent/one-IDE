@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { State, FolderState, FileState } from '../types';
+import { State, FolderState, ActiveFile } from '../types';
 import { ConfigService } from './ConfigService';
 import { Logger } from '../logger';
 import { IdeMetaData } from '../IdeMetaData';
@@ -83,35 +83,35 @@ export class IdeConnector {
         const activeEditor = vscode.window.activeTextEditor;
         const activePath = activeEditor?.document.uri.fsPath;
 
-        const openedFiles: FileState[] = [];
+        const openedFiles: string[] = [];
+        let activeFile: ActiveFile | undefined = undefined;
+
         const tabs: vscode.Tab[] = vscode.window.tabGroups.all.flatMap(group => group.tabs);
 
         for (const tab of tabs) {
             if (tab.input instanceof vscode.TabInputText) {
                 const fsPath = tab.input.uri.fsPath;
                 if (this.configService.shouldSyncFile(fsPath)) {
-                    let cursor = 0;
-                    let column = 0;
-
-                    const fsPathLower = PathUtils.normalizePath(fsPath);
-                    const editor = vscode.window.visibleTextEditors.find(e => PathUtils.normalizePath(e.document.uri.fsPath) === fsPathLower);
-
-                    if (editor) {
-                        cursor = editor.selection.active.line;
-                        column = editor.selection.active.character;
+                    openedFiles.push(fsPath);
+                    
+                    if (activePath && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activePath)) {
+                        let cursor = 0;
+                        let column = 0;
+                        if (activeEditor) {
+                            cursor = activeEditor.selection.active.line;
+                            column = activeEditor.selection.active.character;
+                        }
+                        activeFile = {
+                            filePath: fsPath,
+                            cursor: cursor,
+                            column: column
+                        };
                     }
-
-                    openedFiles.push({
-                        filePath: fsPath,
-                        cursor: cursor,
-                        column: column,
-                        isActive: false // will be recalculated in buildState
-                    });
                 }
             }
         }
 
-        return StateHelper.buildState(rootPath, openedFiles, activePath);
+        return StateHelper.buildState(rootPath, openedFiles, activeFile);
     }
 
     /**
@@ -125,7 +125,6 @@ export class IdeConnector {
             this.isApplyingState = true;
 
             try {
-                const filesToOpen: FileState[] = [];
                 const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
                 if (!rootPath) {
@@ -140,7 +139,8 @@ export class IdeConnector {
                     return;
                 }
 
-                filesToOpen.push(...StateHelper.getFiles(state, rootPath));
+                const filesToOpen = StateHelper.getFiles(state, rootPath);
+                const activeFile = StateHelper.getActiveFile(state, rootPath);
 
                 const currentTabs = vscode.window.tabGroups.all.flatMap(group => group.tabs);
                 const currentFiles = new Map<string, vscode.Tab>();
@@ -162,48 +162,62 @@ export class IdeConnector {
                         continue;
                     }
 
-                    const keep = filesToOpen.some(f => PathUtils.normalizePath(f.filePath) === PathUtils.normalizePath(fsPath));
+                    const keep = filesToOpen.some(f => PathUtils.normalizePath(f) === PathUtils.normalizePath(fsPath));
                     if (!keep) {
                         Logger.log(`Closing file: ${fsPath}`);
                         await vscode.window.tabGroups.close(tab);
                     }
                 }
 
-                // 3. Open or Update files
-                // Iterate through files in the state and open/activate/scroll them.
-                for (const fileState of filesToOpen) {
-                    try {
-                        const fsPath = fileState.filePath;
-                        const uri = vscode.Uri.file(fsPath);
+                // 3. Open files
+                for (const fsPath of filesToOpen) {
+                    // If this file is the active file, we can skip opening it here
+                    // because it will be opened and activated in step 4.
+                    if (activeFile && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activeFile.filePath)) {
+                        continue;
+                    }
 
-                        // 3.1 Open if need open
-                        let editor = this.getTextEditor(fsPath);
-                        const isActive = PathUtils.normalizePath(vscode.window.activeTextEditor?.document.uri.fsPath || '') === PathUtils.normalizePath(fsPath);
+                    try {
+                        const uri = vscode.Uri.file(fsPath);
                         const isOpened = Array.from(currentFiles.keys()).some(k => PathUtils.normalizePath(k) === PathUtils.normalizePath(fsPath));
 
-                        if ((!isOpened && !editor) || (fileState.isActive && !isActive)) {
-                            Logger.log(`Opening/Updating file: ${fsPath}`);
+                        if (!isOpened) {
+                            Logger.log(`Opening file: ${fsPath}`);
                             const doc = await vscode.workspace.openTextDocument(uri);
-                            editor = await vscode.window.showTextDocument(doc, {
+                            await vscode.window.showTextDocument(doc, {
                                 preview: false,
-                                preserveFocus: !fileState.isActive,
-                                viewColumn: editor?.viewColumn
+                                preserveFocus: true
                             });
                         }
+                    } catch (e) {
+                        Logger.error(`Failed to sync file ${fsPath}:`, e);
+                    }
+                }
+                
+                // 4. Activate file and move cursor
+                if (activeFile) {
+                    try {
+                        const fsPath = activeFile.filePath;
+                        const uri = vscode.Uri.file(fsPath);
+                        Logger.log(`Activating file: ${fsPath}`);
+                        
+                        const doc = await vscode.workspace.openTextDocument(uri);
+                        const editor = await vscode.window.showTextDocument(doc, {
+                            preview: false,
+                            preserveFocus: false
+                        });
 
-                        // 3.2 Move caret if need move
-                        if (editor && fileState.cursor >= 0) {
+                        if (editor && activeFile.cursor >= 0) {
                             const currentCursor = editor.selection.active;
-                            if (currentCursor.line !== fileState.cursor || currentCursor.character !== (fileState.column || 0)) {
-                                Logger.log(`Moving cursor to ${fileState.cursor}:${fileState.column} in ${fsPath}`);
-                                const newPos = new vscode.Position(fileState.cursor, fileState.column || 0);
+                            if (currentCursor.line !== activeFile.cursor || currentCursor.character !== (activeFile.column || 0)) {
+                                Logger.log(`Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${fsPath}`);
+                                const newPos = new vscode.Position(activeFile.cursor, activeFile.column || 0);
                                 editor.selection = new vscode.Selection(newPos, newPos);
                                 editor.revealRange(new vscode.Range(newPos, newPos), vscode.TextEditorRevealType.InCenter);
                             }
                         }
-
                     } catch (e) {
-                        Logger.error(`Failed to sync file ${fileState.filePath}:`, e);
+                         Logger.error(`Failed to activate file ${activeFile.filePath}:`, e);
                     }
                 }
 

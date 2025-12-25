@@ -14,7 +14,7 @@ object Logger {
         path.parent.toFile().mkdirs()
         path.toFile()
     }
-    
+
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     init {
@@ -27,12 +27,12 @@ object Logger {
                 val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
                 val backup = File(logFile.parent, "${logFile.name}.$timestamp")
                 logFile.renameTo(backup)
-                
+
                 // Clean up old logs (keep last 5)
                 val files = logFile.parentFile.listFiles { f -> f.name.startsWith("one-ide.log.") }
                     ?.sortedByDescending { it.name }
                     ?: return
-                
+
                 if (files.size > 5) {
                     files.drop(5).forEach { it.delete() }
                 }
@@ -58,16 +58,29 @@ object Logger {
     }
 
     fun info(message: String, metaData: IdeMetaData? = null) {
-        ideaLogger.info(message)
         writeToFile("INFO", message, metaData)
+    }
+
+    fun warn(message: String, metaData: IdeMetaData? = null) {
+        writeToFile("WARN", message, metaData)
+    }
+
+    fun warn(message: String, e: Throwable? = null, metaData: IdeMetaData? = null) {
+        if (e != null) {
+            writeToFile("WARN", "$message\n${e.stackTraceToString()}", metaData)
+        } else {
+            writeToFile("WARN", message, metaData)
+        }
+    }
+
+    fun error(message: String, metaData: IdeMetaData? = null) {
+        writeToFile("ERROR", message, metaData)
     }
 
     fun error(message: String, e: Throwable? = null, metaData: IdeMetaData? = null) {
         if (e != null) {
-            ideaLogger.error(message, e)
             writeToFile("ERROR", "$message\n${e.stackTraceToString()}", metaData)
         } else {
-            ideaLogger.error(message)
             writeToFile("ERROR", message, metaData)
         }
     }

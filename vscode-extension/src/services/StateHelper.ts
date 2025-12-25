@@ -1,4 +1,4 @@
-import { FolderState, FileState, State } from '../types';
+import { FolderState, ActiveFile, State } from '../types';
 import { IdeMetaData } from '../IdeMetaData';
 import * as path from 'path';
 import { PathUtils } from '../utils/PathUtils';
@@ -9,29 +9,32 @@ export class StateHelper {
      * All paths are converted to lowercase and normalized.
      * 
      * @param rootPath The root path of the workspace
-     * @param openedFiles List of opened files with their cursor/selection info
-     * @param activePath The currently active file path
+     * @param openedFiles List of opened file paths
+     * @param activeFile The currently active file with cursor info
      * @returns A State object
      */
-    public static buildState(rootPath: string, openedFiles: FileState[], activePath: string | undefined): State {
+    public static buildState(rootPath: string, openedFiles: string[], activeFile: ActiveFile | undefined): State {
         const rootPathLower = PathUtils.normalizePath(rootPath);
-        const activePathLower = activePath ? PathUtils.normalizePath(activePath) : undefined;
 
-        const fileStates: FileState[] = openedFiles
-            .filter(f => PathUtils.normalizePath(f.filePath).startsWith(rootPathLower))
-            .map(f => {
-                const fsPathLower = PathUtils.normalizePath(f.filePath);
-                return {
-                    filePath: fsPathLower,
-                    cursor: f.cursor,
-                    column: f.column,
-                    isActive: fsPathLower === activePathLower
+        const filePaths: string[] = openedFiles
+            .filter(f => PathUtils.normalizePath(f).startsWith(rootPathLower))
+            .map(f => PathUtils.normalizePath(f));
+
+        let activeFileInRoot: ActiveFile | undefined = undefined;
+        if (activeFile) {
+            const activePathLower = PathUtils.normalizePath(activeFile.filePath);
+            if (activePathLower.startsWith(rootPathLower)) {
+                activeFileInRoot = {
+                    ...activeFile,
+                    filePath: activePathLower
                 };
-            });
+            }
+        }
 
         const rootNode: FolderState = {
             path: rootPathLower,
-            openedFiles: fileStates
+            openedFiles: filePaths,
+            activeFile: activeFileInRoot
         };
 
         const meta = IdeMetaData.getInstance();
@@ -87,9 +90,9 @@ export class StateHelper {
      * 
      * @param state The state object
      * @param rootPath The root path of the current workspace
-     * @returns List of FileState objects
+     * @returns List of file paths
      */
-    public static getFiles(state: State, rootPath: string): FileState[] {
+    public static getFiles(state: State, rootPath: string): string[] {
         const normalizedRootPath = PathUtils.normalizePath(rootPath);
 
         if (!state.root || !state.root.openedFiles) {
@@ -98,11 +101,29 @@ export class StateHelper {
 
         return state.root.openedFiles.filter(f => {
             try {
-                const fPath = PathUtils.normalizePath(f.filePath);
+                const fPath = PathUtils.normalizePath(f);
                 return fPath.startsWith(normalizedRootPath);
             } catch (e) {
                 return false;
             }
         });
+    }
+
+    /**
+     * Extracts the active file from the state if it belongs to the given root path.
+     * 
+     * @param state The state object
+     * @param rootPath The root path of the current workspace
+     * @returns The active file or undefined
+     */
+    public static getActiveFile(state: State, rootPath: string): ActiveFile | undefined {
+        const normalizedRootPath = PathUtils.normalizePath(rootPath);
+        const active = state.root.activeFile;
+        if (!active) return undefined;
+
+        if (PathUtils.normalizePath(active.filePath).startsWith(normalizedRootPath)) {
+            return active;
+        }
+        return undefined;
     }
 }

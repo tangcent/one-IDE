@@ -58,8 +58,13 @@ describe('IdeConnector', () => {
             root: {
                 path: '/root',
                 openedFiles: [
-                    { filePath: '/root/file1.ts', cursor: 0, column: 0, isActive: true }
-                ]
+                    '/root/file1.ts'
+                ],
+                activeFile: {
+                    filePath: '/root/file1.ts',
+                    cursor: 0,
+                    column: 0
+                }
             }
         };
 

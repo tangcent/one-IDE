@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import { StateHelper } from '../../services/StateHelper';
-import { FileState, State } from '../../types';
+import { ActiveFile, State } from '../../types';
 import { IdeMetaData } from '../../IdeMetaData';
 
 /**
@@ -11,39 +11,45 @@ describe('StateHelper', () => {
     describe('buildState', () => {
         it('should build a flat state with normalized paths', () => {
             const rootPath = '/User/Project';
-            const openedFiles: FileState[] = [
-                { filePath: '/User/Project/src/main.ts', cursor: 10, column: 5, isActive: false },
-                { filePath: '/User/Project/README.md', cursor: 0, column: 0, isActive: false }
+            const openedFiles: string[] = [
+                '/User/Project/src/main.ts',
+                '/User/Project/README.md'
             ];
-            const activePath = '/User/Project/src/main.ts';
+            const activeFile: ActiveFile = {
+                filePath: '/User/Project/src/main.ts',
+                cursor: 10,
+                column: 5
+            };
 
-            const state = StateHelper.buildState(rootPath, openedFiles, activePath);
+            const state = StateHelper.buildState(rootPath, openedFiles, activeFile);
 
             const rootPathLower = path.resolve(rootPath).toLowerCase();
             assert.strictEqual(state.root.path, rootPathLower);
             assert.strictEqual(state.root.openedFiles.length, 2);
 
-            const file1 = state.root.openedFiles.find(f => f.filePath.endsWith('main.ts'));
+            const file1 = state.root.openedFiles.find(f => f.endsWith('main.ts'));
             assert.ok(file1);
-            assert.strictEqual(file1?.isActive, true);
-            assert.strictEqual(file1?.filePath, path.resolve('/User/Project/src/main.ts').toLowerCase());
-
-            const file2 = state.root.openedFiles.find(f => f.filePath.endsWith('readme.md'));
+            
+            const file2 = state.root.openedFiles.find(f => f.endsWith('readme.md'));
             assert.ok(file2);
-            assert.strictEqual(file2?.isActive, false);
-            assert.strictEqual(file2?.filePath, path.resolve('/User/Project/README.md').toLowerCase());
+
+            const active = state.root.activeFile;
+            assert.ok(active);
+            assert.strictEqual(active?.filePath, path.resolve('/User/Project/src/main.ts').toLowerCase());
+            assert.strictEqual(active?.cursor, 10);
+            assert.strictEqual(active?.column, 5);
         });
 
         it('should filter out files outside of root', () => {
             const rootPath = '/User/Project';
-            const openedFiles: FileState[] = [
-                { filePath: '/User/Project/in.ts', cursor: 0, isActive: false },
-                { filePath: '/User/Other/out.ts', cursor: 0, isActive: false }
+            const openedFiles: string[] = [
+                '/User/Project/in.ts',
+                '/User/Other/out.ts'
             ];
 
             const state = StateHelper.buildState(rootPath, openedFiles, undefined);
             assert.strictEqual(state.root.openedFiles.length, 1);
-            assert.ok(state.root.openedFiles[0].filePath.includes('in.ts'));
+            assert.ok(state.root.openedFiles[0].includes('in.ts'));
         });
     });
 
@@ -57,15 +63,15 @@ describe('StateHelper', () => {
                 root: {
                     path: path.resolve(rootPath).toLowerCase(),
                     openedFiles: [
-                        { filePath: path.resolve('/User/Project/file1.ts').toLowerCase(), cursor: 0, isActive: true },
-                        { filePath: path.resolve('/User/Other/file2.ts').toLowerCase(), cursor: 0, isActive: false }
+                        path.resolve('/User/Project/file1.ts').toLowerCase(),
+                        path.resolve('/User/Other/file2.ts').toLowerCase()
                     ]
                 }
             };
 
             const files = StateHelper.getFiles(state, rootPath);
             assert.strictEqual(files.length, 1);
-            assert.ok(files[0].filePath.endsWith('file1.ts'));
+            assert.ok(files[0].endsWith('file1.ts'));
         });
 
         it('should handle empty state', () => {

@@ -1,13 +1,13 @@
-export interface FileState {
+export interface ActiveFile {
     filePath: string;
     cursor: number;
     column?: number;
-    isActive: boolean;
 }
 
 export interface FolderState {
     path: string;
-    openedFiles: FileState[];
+    openedFiles: string[];
+    activeFile?: ActiveFile;
 }
 
 export interface State {
