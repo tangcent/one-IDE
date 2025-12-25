@@ -2,6 +2,10 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.0] - 2025-12-25
+- feat:Add debouncer to prevent rapid consecutive state applications from other IDEs
+- refactor(state): simplify state structure
+
 ## [1.0.6] - 2025-12-24
 - fix(cluster): handle window focus during election to prevent race condition
 
