@@ -1,6 +1,7 @@
 package com.oneide.services
 
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.oneide.OneIde
 import com.oneide.models.Config
 import org.junit.Test
 import java.nio.file.Path
@@ -13,7 +14,8 @@ class ConfigServiceTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         oneIdeDir = createTempDir("one-ide-test").toPath()
-        configService = ConfigService(oneIdeDir)
+        OneIde.oneIdeDir = oneIdeDir
+        configService = ConfigService(project)
         // Wait a bit for file watcher to initialize
         Thread.sleep(100)
     }
@@ -41,7 +43,7 @@ class ConfigServiceTest : BasePlatformTestCase() {
         Thread.sleep(200)
         
         // Create new service instance to test loading
-        val configService2 = ConfigService(oneIdeDir)
+        val configService2 = ConfigService(project)
         Thread.sleep(100)
         
         val loadedConfig = configService2.getConfig()
@@ -150,7 +152,7 @@ class ConfigServiceTest : BasePlatformTestCase() {
         configFile.writeText("")
         
         // Create new service with empty config file
-        val configService2 = ConfigService(oneIdeDir)
+        val configService2 = ConfigService(project)
         Thread.sleep(100)
         
         val config = configService2.getConfig()
@@ -165,7 +167,7 @@ class ConfigServiceTest : BasePlatformTestCase() {
         configFile.writeText("{ invalid json")
         
         // Create new service with malformed config file
-        val configService2 = ConfigService(oneIdeDir)
+        val configService2 = ConfigService(project)
         Thread.sleep(100)
         
         val config = configService2.getConfig()

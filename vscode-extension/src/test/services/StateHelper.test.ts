@@ -24,16 +24,16 @@ describe('StateHelper', () => {
             const state = StateHelper.buildState(rootPath, openedFiles, activeFile);
 
             const rootPathLower = path.resolve(rootPath).toLowerCase();
-            assert.strictEqual(state.root.path, rootPathLower);
-            assert.strictEqual(state.root.openedFiles.length, 2);
+            assert.strictEqual(state.root, rootPathLower);
+            assert.strictEqual(state.editorState.openedFiles.length, 2);
 
-            const file1 = state.root.openedFiles.find(f => f.endsWith('main.ts'));
+            const file1 = state.editorState.openedFiles.find(f => f.endsWith('main.ts'));
             assert.ok(file1);
             
-            const file2 = state.root.openedFiles.find(f => f.endsWith('readme.md'));
+            const file2 = state.editorState.openedFiles.find(f => f.endsWith('readme.md'));
             assert.ok(file2);
 
-            const active = state.root.activeFile;
+            const active = state.editorState.activeFile;
             assert.ok(active);
             assert.strictEqual(active?.filePath, path.resolve('/User/Project/src/main.ts').toLowerCase());
             assert.strictEqual(active?.cursor, 10);
@@ -48,8 +48,8 @@ describe('StateHelper', () => {
             ];
 
             const state = StateHelper.buildState(rootPath, openedFiles, undefined);
-            assert.strictEqual(state.root.openedFiles.length, 1);
-            assert.ok(state.root.openedFiles[0].includes('in.ts'));
+            assert.strictEqual(state.editorState.openedFiles.length, 1);
+            assert.ok(state.editorState.openedFiles[0].includes('in.ts'));
         });
     });
 
@@ -60,12 +60,13 @@ describe('StateHelper', () => {
                 timestamp: Date.now(),
                 source: 'test',
                 ide: 'vscode',
-                root: {
-                    path: path.resolve(rootPath).toLowerCase(),
+                root: path.resolve(rootPath).toLowerCase(),
+                editorState: {
                     openedFiles: [
                         path.resolve('/User/Project/file1.ts').toLowerCase(),
                         path.resolve('/User/Other/file2.ts').toLowerCase()
-                    ]
+                    ],
+                    activeFile: undefined
                 }
             };
 
@@ -79,9 +80,10 @@ describe('StateHelper', () => {
                 timestamp: Date.now(),
                 source: 'test',
                 ide: 'vscode',
-                root: {
-                    path: '/root',
-                    openedFiles: []
+                root: '/root',
+                editorState: {
+                    openedFiles: [],
+                    activeFile: undefined
                 }
             };
             const files = StateHelper.getFiles(state, '/root');
@@ -116,9 +118,10 @@ describe('StateHelper', () => {
                 timestamp: Date.now(),
                 source: 'test',
                 ide: 'vscode',
-                root: {
-                    path: path.resolve(rootPath).toLowerCase(),
-                    openedFiles: []
+                root: path.resolve(rootPath).toLowerCase(),
+                editorState: {
+                    openedFiles: [],
+                    activeFile: undefined
                 }
             };
             assert.strictEqual(StateHelper.checkPathBelongsToState(state, '/User/Project/file.ts'), true);
@@ -139,9 +142,10 @@ describe('StateHelper', () => {
                 timestamp: Date.now(),
                 source: 'test',
                 ide: 'vscode',
-                root: {
-                    path: path.resolve(rootPath).toLowerCase(),
-                    openedFiles: []
+                root: path.resolve(rootPath).toLowerCase(),
+                editorState: {
+                    openedFiles: [],
+                    activeFile: undefined
                 }
             };
             assert.strictEqual(StateHelper.hasIntersection(state, '/User/Project/Sub'), true);

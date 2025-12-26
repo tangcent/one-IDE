@@ -2,7 +2,7 @@ package com.oneide.utils
 
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.oneide.models.ActiveFile
-import com.oneide.models.FolderState
+import com.oneide.models.EditorState
 import com.oneide.models.IdeMetaData
 import com.oneide.models.State
 import org.junit.Test
@@ -32,20 +32,20 @@ class StateHelperTest : BasePlatformTestCase() {
         val state = StateHelper.buildState(metaData, rootPath, openedFiles, activeFile)
 
         val rootPathLower = Paths.get(rootPath).toAbsolutePath().normalize().toString().lowercase()
-        assertEquals(rootPathLower, state.root.path)
-        assertEquals(2, state.root.openedFiles.size)
+        assertEquals(rootPathLower, state.root)
+        assertEquals(2, state.editorState.openedFiles.size)
 
-        val file1 = state.root.openedFiles.find { it.endsWith("main.kt") }
+        val file1 = state.editorState.openedFiles.find { it.endsWith("main.kt") }
         assertNotNull(file1)
         val expectedPath1 = Paths.get("/User/Project/src/main.kt").toAbsolutePath().normalize().toString().lowercase()
         assertEquals(expectedPath1, file1)
 
-        val file2 = state.root.openedFiles.find { it.endsWith("readme.md") }
+        val file2 = state.editorState.openedFiles.find { it.endsWith("readme.md") }
         assertNotNull(file2)
         val expectedPath2 = Paths.get("/User/Project/README.md").toAbsolutePath().normalize().toString().lowercase()
         assertEquals(expectedPath2, file2)
         
-        val active = state.root.activeFile
+        val active = state.editorState.activeFile
         assertNotNull(active)
         assertEquals(expectedPath1, active!!.filePath)
         assertEquals(10, active.cursor)
@@ -60,8 +60,8 @@ class StateHelperTest : BasePlatformTestCase() {
         )
 
         val state = StateHelper.buildState(metaData, rootPath, openedFiles, null)
-        assertEquals(1, state.root.openedFiles.size)
-        assertTrue(state.root.openedFiles[0].contains("in.kt"))
+        assertEquals(1, state.editorState.openedFiles.size)
+        assertTrue(state.editorState.openedFiles[0].contains("in.kt"))
     }
 
     @Test
@@ -73,8 +73,8 @@ class StateHelperTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test",
             ide = "jetbrains",
-            root = FolderState(
-                path = rootPathLower,
+            root = rootPathLower,
+            editorState = EditorState(
                 openedFiles = mutableListOf(
                     Paths.get("/User/Project/file1.kt").toAbsolutePath().normalize().toString().lowercase(),
                     Paths.get("/User/Other/file2.kt").toAbsolutePath().normalize().toString().lowercase()
@@ -97,8 +97,8 @@ class StateHelperTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test",
             ide = "jetbrains",
-            root = FolderState(
-                path = "/root",
+            root = "/root",
+            editorState = EditorState(
                 openedFiles = mutableListOf()
             )
         )
@@ -126,8 +126,8 @@ class StateHelperTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test",
             ide = "jetbrains",
-            root = FolderState(
-                path = rootPathLower,
+            root = rootPathLower,
+            editorState = EditorState(
                 openedFiles = mutableListOf()
             )
         )
@@ -148,8 +148,8 @@ class StateHelperTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test",
             ide = "jetbrains",
-            root = FolderState(
-                path = rootPathLower,
+            root = rootPathLower,
+            editorState = EditorState(
                 openedFiles = mutableListOf()
             )
         )

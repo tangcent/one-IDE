@@ -20,7 +20,8 @@ describe('IdeConnector', () => {
     beforeEach(() => {
         mockConfigService = {
             shouldSyncFile: () => true,
-            dispose: () => {}
+            dispose: () => {},
+            getConfig: () => ({ })
         };
         
         mockVSCode = vscodeMock;
@@ -55,8 +56,8 @@ describe('IdeConnector', () => {
             timestamp: Date.now(),
             source: 'test',
             ide: 'test',
-            root: {
-                path: '/root',
+            root: '/root',
+            editorState: {
                 openedFiles: [
                     '/root/file1.ts'
                 ],
@@ -93,9 +94,10 @@ describe('IdeConnector', () => {
             timestamp: Date.now(),
             source: 'test',
             ide: 'test',
-            root: {
-                path: '/project/sub',
-                openedFiles: [] // Incoming state has no open files
+            root: '/project/sub',
+            editorState: {
+                openedFiles: [], // Incoming state has no open files
+                activeFile: undefined
             }
         };
 

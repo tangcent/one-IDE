@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.oneide.models.ClusterState
 import com.oneide.models.State
 import com.oneide.models.IdeMetaData
+import com.oneide.OneIde
 import com.oneide.utils.Logger
 import java.io.File
 import java.nio.file.FileSystems
@@ -20,11 +21,10 @@ import java.nio.file.StandardWatchEventKinds
  * - FOLLOWERS watch this file for changes and apply the new state.
  */
 class StateService(
-    oneIdeDir: Path,
     private val metaData: IdeMetaData
 ) {
     private val logger = Logger.withMetaData(metaData)
-    private val stateFile: File = oneIdeDir.resolve("cluster").resolve("state.json").toFile()
+    private val stateFile: File = OneIde.oneIdeDir.resolve("cluster").resolve("state.json").toFile()
     private val mapper = jacksonObjectMapper()
     private var onStateReceivedCallback: ((State) -> Unit)? = null
     private var watchThread: Thread? = null

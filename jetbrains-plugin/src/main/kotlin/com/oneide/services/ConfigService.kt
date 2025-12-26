@@ -3,13 +3,16 @@ package com.oneide.services
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.oneide.models.Config
 import com.intellij.ide.util.PropertiesComponent
+import com.oneide.OneIde
+import com.oneide.utils.Logger
 import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.Path
@@ -18,8 +21,17 @@ import java.nio.file.StandardWatchEventKinds
 import java.nio.file.WatchService
 import java.util.concurrent.atomic.AtomicBoolean
 
-class ConfigService(private val oneIdeDir: Path) {
-    private val logger = Logger.getInstance(ConfigService::class.java)
+/**
+ * Service for managing One-IDE configuration.
+ *
+ * Responsibilities:
+ * - Loading and saving global configuration (config.json) which is shared across IDEs.
+ * - Loading and saving project-specific configuration (PropertiesComponent).
+ * - Watching for changes in the global configuration file.
+ */
+@Service(Service.Level.PROJECT)
+class ConfigService(private val project: Project) : Disposable {
+    private val oneIdeDir = OneIde.oneIdeDir
     private val mapper = jacksonObjectMapper()
     private val configFile = oneIdeDir.resolve("config.json").toFile()
 
@@ -34,7 +46,7 @@ class ConfigService(private val oneIdeDir: Path) {
         watchConfigFile()
     }
 
-    fun dispose() {
+    override fun dispose() {
         isRunning.set(false)
 
         // Interrupt the watch thread if it's still running
@@ -51,13 +63,25 @@ class ConfigService(private val oneIdeDir: Path) {
         watchService = null
     }
 
+    companion object {
+        fun getInstance(project: Project): ConfigService = project.getService(ConfigService::class.java)
+    }
+
+    /**
+     * Retrieves the current configuration, merging global and project-specific settings.
+     */
     fun getConfig(): Config {
-        val properties = PropertiesComponent.getInstance()
+        val properties = PropertiesComponent.getInstance(project)
         config.syncRules = properties.getBoolean("com.oneide.ai.syncRules", true)
         config.currentTool = properties.getValue("com.oneide.ai.currentTool", "Auto")
         return config
     }
 
+    /**
+     * Updates the configuration.
+     * Global settings are saved to config.json.
+     * Project settings are saved to PropertiesComponent.
+     */
     fun updateConfig(newConfig: Config) {
         // 1. Update Global Config (and save to file)
         config.excludeFiles = newConfig.excludeFiles
@@ -79,7 +103,7 @@ class ConfigService(private val oneIdeDir: Path) {
         }
 
         // 2. Update Project Config (and save to PropertiesComponent)
-        val properties = PropertiesComponent.getInstance()
+        val properties = PropertiesComponent.getInstance(project)
         properties.setValue("com.oneide.ai.syncRules", newConfig.syncRules)
         properties.setValue("com.oneide.ai.currentTool", newConfig.currentTool)
 
@@ -92,13 +116,13 @@ class ConfigService(private val oneIdeDir: Path) {
         try {
             configFile.writeText(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(config))
             try {
-                logger.info("Config updated and saved: $config")
+                Logger.info("Config updated and saved: $config")
             } catch (logError: Exception) {
                 // Logger might not be available in test environment
             }
         } catch (e: Exception) {
             try {
-                logger.error("Failed to save config", e)
+                Logger.error("Failed to save config", e)
             } catch (logError: Exception) {
                 // Logger might not be available in test environment
             }
@@ -113,7 +137,7 @@ class ConfigService(private val oneIdeDir: Path) {
                 configFile.writeText(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(defaultConfig))
             } catch (e: Exception) {
                 try {
-                    logger.error("Failed to create config file", e)
+                    Logger.error("Failed to create config file", e)
                 } catch (logError: Exception) {
                     // Logger might not be available in test environment
                 }
@@ -163,7 +187,7 @@ class ConfigService(private val oneIdeDir: Path) {
                             if (filename.toString() == "config.json") {
                                 // Slight delay to ensure file write is complete
                                 Thread.sleep(50)
-                                logger.info("Config file changed, reloading...")
+                                Logger.info("Config file changed, reloading...")
                                 loadConfig()
                             }
                         }
@@ -182,7 +206,7 @@ class ConfigService(private val oneIdeDir: Path) {
                 }
             } catch (e: Exception) {
                 try {
-                    logger.error("Error watching config file", e)
+                    Logger.error("Error watching config file", e)
                 } catch (logError: Exception) {
                     // Logger might not be available in test environment
                 }
@@ -218,7 +242,7 @@ class ConfigService(private val oneIdeDir: Path) {
             val matcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
             return matcher.matches(Paths.get(text))
         } catch (e: Exception) {
-            logger.warn("Invalid glob pattern: $pattern", e)
+            Logger.warn("Invalid glob pattern: $pattern", e)
             return false
         }
     }
@@ -226,19 +250,16 @@ class ConfigService(private val oneIdeDir: Path) {
     private fun isIgnoredByGit(filePath: String): Boolean {
         try {
             // Check if IntelliJ components are available
-            val projectManager = ProjectManager.getInstance()
-            val openProjects = projectManager.openProjects
-
-            for (project in openProjects) {
-                if (isFileInProject(project, filePath)) {
-                    val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(File(filePath)) ?: return false
-                    return ChangeListManager.getInstance(project).isIgnoredFile(virtualFile)
-                }
+            if (isFileInProject(project, filePath)) {
+                val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(File(filePath)) ?: return false
+                return ChangeListManager.getInstance(project).isIgnoredFile(virtualFile)
             }
         } catch (e: Exception) {
             // Handle cases where IntelliJ components are not available (e.g., in tests)
             try {
-                logger.debug("IntelliJ components not available for git ignore check", e)
+                // Logger.debug("IntelliJ components not available for git ignore check", e) // Logger doesn't have debug? 
+                // Using warn for now or just skip
+                Logger.warn("IntelliJ components not available for git ignore check", e)
             } catch (logError: Exception) {
                 // Logger might not be available in test environment
             }

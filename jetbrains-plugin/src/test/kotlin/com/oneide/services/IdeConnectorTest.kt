@@ -1,7 +1,6 @@
 package com.oneide.services
 
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import com.oneide.models.FolderState
 import com.oneide.models.State
 import com.oneide.utils.Debouncer
 import com.intellij.util.ui.UIUtil
@@ -23,7 +22,7 @@ class IdeConnectorTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         tempDir = Files.createTempDirectory("one-ide-test")
-        configService = ConfigService(tempDir)
+        configService = ConfigService(project)
         ideConnector = IdeConnector(project, configService)
         println("Project BasePath: ${project.basePath}")
     }
@@ -44,14 +43,14 @@ class IdeConnectorTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test-source-1",
             ide = "test-ide",
-            root = FolderState("/")
+            root = "/"
         )
 
         val state2 = State(
             timestamp = System.currentTimeMillis(),
             source = "test-source-2",
             ide = "test-ide",
-            root = FolderState("/")
+            root = "/"
         )
 
         // Call 1

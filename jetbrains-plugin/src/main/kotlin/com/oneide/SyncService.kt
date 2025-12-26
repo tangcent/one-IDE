@@ -16,15 +16,23 @@ import com.oneide.utils.Logger
 import java.nio.file.Paths
 
 @Service(Service.Level.PROJECT)
+/**
+ * The core service that orchestrates One-IDE synchronization for a specific project.
+ *
+ * Responsibilities:
+ * - Initializes and manages lifecycle of sub-services: [ConfigService], [StateService], [IdeConnector], [ClusterService].
+ * - Holds the project metadata ([IdeMetaData]).
+ * - Manages the global enabled/disabled state for synchronization.
+ * - Updates status bar widgets across open projects when state changes.
+ */
 class SyncService(private val project: Project) : Disposable {
     val metaData = IdeMetaData.getInstance(project)
     private val logger = Logger.withMetaData(metaData)
-    private val oneIdeDir = Paths.get(System.getProperty("user.home"), ".one-ide")
 
-    private val configService = ConfigService(oneIdeDir)
-    private val stateService = StateService(oneIdeDir, metaData)
+    private val configService = ConfigService.getInstance(project)
+    private val stateService = StateService(metaData)
     private val ideConnector = IdeConnector(project, configService)
-    private val clusterService = ClusterService(oneIdeDir.toFile(), metaData.id, project, ideConnector, stateService)
+    private val clusterService = ClusterService(metaData.id, project, ideConnector, stateService)
 
     var isEnabled: Boolean = true
         set(value) {
@@ -39,21 +47,14 @@ class SyncService(private val project: Project) : Disposable {
 
     override fun dispose() {
         logger.info("Disposing SyncService for ${project.name}")
-        configService.dispose()
+        // ConfigService is a project service, so it will be disposed by the platform
+        // configService.dispose() 
         stateService.dispose()
         clusterService.dispose()
     }
 
     companion object {
         fun getInstance(project: Project): SyncService = project.getService(SyncService::class.java)
-    }
-
-    fun updateConfig(newConfig: Config) {
-        configService.updateConfig(newConfig)
-    }
-
-    fun getConfig(): Config {
-        return configService.getConfig()
     }
 
     private fun updateAllStatusBars() {

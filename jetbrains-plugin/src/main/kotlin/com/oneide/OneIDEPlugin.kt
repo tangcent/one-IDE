@@ -12,6 +12,13 @@ import com.intellij.util.Consumer
 import java.awt.event.MouseEvent
 import com.oneide.services.RuleService
 
+/**
+ * The main entry point for the One-IDE plugin post-startup activity.
+ *
+ * Responsibilities:
+ * - Initializes the [SyncService] for the project.
+ * - Starts the [RuleService] to handle AI rule synchronization.
+ */
 class OneIDEPlugin : StartupActivity {
     override fun runActivity(project: Project) {
         SyncService.getInstance(project)
@@ -21,6 +28,9 @@ class OneIDEPlugin : StartupActivity {
     }
 }
 
+/**
+ * Action to toggle the enabled state of One-IDE synchronization.
+ */
 class ToggleSyncAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -32,6 +42,10 @@ class ToggleSyncAction : AnAction() {
     }
 }
 
+/**
+ * Factory for creating the One-IDE status bar widget.
+ * Displays the current sync status (On/Off) and allows toggling via click.
+ */
 class OneIDEStatusBarWidgetFactory : StatusBarWidgetFactory {
     override fun getId(): String = "OneIDEStatusBar"
 

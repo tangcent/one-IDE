@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { State, FolderState, ActiveFile, NodeInfo } from '../types';
+import { State, ActiveFile, NodeInfo } from '../types';
 import { ConfigService } from './ConfigService';
 import { Logger } from '../logger';
 import { IdeMetaData } from '../IdeMetaData';
@@ -10,8 +10,8 @@ import { PathUtils } from '../utils/PathUtils';
 import { StateHelper } from './StateHelper';
 
 /**
- * Service responsible for connecting the IDE events with the synchronization logic.
- * It listens for user activities (file selection, edits) and captures/applies the IDE state.
+ * Service responsible for connecting the Ide events with the synchronization logic.
+ * It listens for user activities (file selection, edits) and captures/applies the Ide state.
  */
 export class IdeConnector {
     private configService: ConfigService;
@@ -82,6 +82,17 @@ export class IdeConnector {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         const rootPath = workspaceFolders && workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
+        // 1. Capture Editor State
+        const editorState = await this.captureEditorState();
+
+        return StateHelper.buildState(
+            rootPath, 
+            editorState.openedFiles, 
+            editorState.activeFile
+        );
+    }
+
+    private async captureEditorState(): Promise<{ openedFiles: string[], activeFile: ActiveFile | undefined }> {
         const activeEditor = vscode.window.activeTextEditor;
         const activePath = activeEditor?.document.uri.fsPath;
 
@@ -126,8 +137,7 @@ export class IdeConnector {
                 }
             }
         }
-
-        return StateHelper.buildState(rootPath, openedFiles, activeFile);
+        return { openedFiles, activeFile };
     }
 
     /**
@@ -151,102 +161,12 @@ export class IdeConnector {
                 // 1. Check intersection
                 // If the current project root has no relationship with the state root, we should not apply the state.
                 if (!StateHelper.hasIntersection(state, rootPath)) {
-                    Logger.log(`Skipping apply state: Project path ${rootPath} has no intersection with state root ${state.root.path}`);
+                    Logger.log(`Skipping apply state: Project path ${rootPath} has no intersection with state root ${state.root}`);
                     return;
                 }
 
-                const filesToOpen = StateHelper.getFiles(state, rootPath);
-                const activeFile = StateHelper.getActiveFile(state, rootPath);
-
-                const currentTabs = vscode.window.tabGroups.all.flatMap(group => group.tabs);
-                const currentFiles = new Map<string, vscode.Tab>();
-
-                for (const tab of currentTabs) {
-                    if (tab.input instanceof vscode.TabInputText) {
-                        currentFiles.set(tab.input.uri.fsPath, tab);
-                    }
-                }
-
-                // 2. Close files not in state
-                // We only close files that are part of the project but not in the new state.
-                for (const [fsPath, tab] of currentFiles) {
-                    // Check if file belongs to current project root AND the incoming state's scope
-                    // If the file is outside the scope of the incoming state (e.g. syncing a subfolder),
-                    // we should not close it as the incoming state has no authority over it.
-                    if (!StateHelper.isInsideRoot(rootPath, fsPath)
-                        || !StateHelper.checkPathBelongsToState(state, fsPath)) {
-                        continue;
-                    }
-
-                    const keep = filesToOpen.some(f => PathUtils.normalizePath(f) === PathUtils.normalizePath(fsPath));
-                    if (!keep) {
-                        Logger.log(`Closing file: ${fsPath}`);
-                        await vscode.window.tabGroups.close(tab);
-                    }
-                }
-
-                // 3. Open files
-                for (const fsPath of filesToOpen) {
-                    // If this file is the active file, we can skip opening it here
-                    // because it will be opened and activated in step 4.
-                    if (activeFile && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activeFile.filePath)) {
-                        continue;
-                    }
-
-                    try {
-                        const uri = vscode.Uri.file(fsPath);
-                        const isOpened = Array.from(currentFiles.keys()).some(k => PathUtils.normalizePath(k) === PathUtils.normalizePath(fsPath));
-
-                        if (!isOpened) {
-                            Logger.log(`Opening file: ${fsPath}`);
-                            const doc = await vscode.workspace.openTextDocument(uri);
-                            await vscode.window.showTextDocument(doc, {
-                                preview: false,
-                                preserveFocus: true
-                            });
-                        }
-                    } catch (e) {
-                        Logger.error(`Failed to sync file ${fsPath}:`, e);
-                    }
-                }
-
-                // 4. Activate file and move cursor
-                if (activeFile) {
-                    try {
-                        const fsPath = activeFile.filePath;
-                        const uri = vscode.Uri.file(fsPath);
-                        Logger.log(`Activating file: ${fsPath}`);
-
-                        const doc = await vscode.workspace.openTextDocument(uri);
-                        const editor = await vscode.window.showTextDocument(doc, {
-                            preview: false,
-                            preserveFocus: false
-                        });
-
-                        if (editor && activeFile.cursor >= 0) {
-                            const startPos = new vscode.Position(activeFile.cursor, activeFile.column || 0);
-
-                            if (activeFile.selectionEndCursor !== undefined && activeFile.selectionEndColumn !== undefined) {
-                                const endPos = new vscode.Position(activeFile.selectionEndCursor, activeFile.selectionEndColumn);
-                                // Check if selection needs update
-                                if (!editor.selection.start.isEqual(startPos) || !editor.selection.end.isEqual(endPos)) {
-                                     Logger.log(`Setting selection to ${activeFile.cursor}:${activeFile.column} - ${activeFile.selectionEndCursor}:${activeFile.selectionEndColumn}`);
-                                     editor.selection = new vscode.Selection(startPos, endPos);
-                                     editor.revealRange(new vscode.Range(startPos, endPos), vscode.TextEditorRevealType.InCenter);
-                                }
-                            } else {
-                                const currentCursor = editor.selection.active;
-                                if (currentCursor.line !== activeFile.cursor || currentCursor.character !== (activeFile.column || 0) || !editor.selection.isEmpty) {
-                                    Logger.log(`Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${fsPath}`);
-                                    editor.selection = new vscode.Selection(startPos, startPos);
-                                    editor.revealRange(new vscode.Range(startPos, startPos), vscode.TextEditorRevealType.InCenter);
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        Logger.error(`Failed to activate file ${activeFile.filePath}:`, e);
-                    }
-                }
+                // 2. Apply Editor State
+                await this.applyEditorState(state, rootPath);
 
             } catch (e) {
                 Logger.error('Error applying state', e);
@@ -254,6 +174,100 @@ export class IdeConnector {
                 this.isApplyingState = false;
             }
         });
+    }
+
+    private async applyEditorState(state: State, rootPath: string) {
+        const filesToOpen = StateHelper.getFiles(state, rootPath);
+        const activeFile = StateHelper.getActiveFile(state, rootPath);
+
+        const currentTabs = vscode.window.tabGroups.all.flatMap(group => group.tabs);
+        const currentFiles = new Map<string, vscode.Tab>();
+
+        for (const tab of currentTabs) {
+            if (tab.input instanceof vscode.TabInputText) {
+                currentFiles.set(tab.input.uri.fsPath, tab);
+            }
+        }
+
+        // Close files not in state
+        for (const [fsPath, tab] of currentFiles) {
+            // Check if file belongs to current project root AND the incoming state's scope
+            // If the file is outside the scope of the incoming state (e.g. syncing a subfolder),
+            // we should not close it as the incoming state has no authority over it.
+            if (!StateHelper.isInsideRoot(rootPath, fsPath)
+                || !StateHelper.checkPathBelongsToState(state, fsPath)) {
+                continue;
+            }
+
+            const keep = filesToOpen.some(f => PathUtils.normalizePath(f) === PathUtils.normalizePath(fsPath));
+            if (!keep) {
+                Logger.log(`Closing file: ${fsPath}`);
+                await vscode.window.tabGroups.close(tab);
+            }
+        }
+
+        // Open files
+        for (const fsPath of filesToOpen) {
+            // If this file is the active file, we can skip opening it here
+            // because it will be opened and activated later.
+            if (activeFile && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activeFile.filePath)) {
+                continue;
+            }
+
+            try {
+                const uri = vscode.Uri.file(fsPath);
+                const isOpened = Array.from(currentFiles.keys()).some(k => PathUtils.normalizePath(k) === PathUtils.normalizePath(fsPath));
+
+                if (!isOpened) {
+                    Logger.log(`Opening file: ${fsPath}`);
+                    const doc = await vscode.workspace.openTextDocument(uri);
+                    await vscode.window.showTextDocument(doc, {
+                        preview: false,
+                        preserveFocus: true
+                    });
+                }
+            } catch (e) {
+                Logger.error(`Failed to sync file ${fsPath}:`, e);
+            }
+        }
+
+        // Activate file and move cursor
+        if (activeFile) {
+            try {
+                const fsPath = activeFile.filePath;
+                const uri = vscode.Uri.file(fsPath);
+                Logger.log(`Activating file: ${fsPath}`);
+
+                const doc = await vscode.workspace.openTextDocument(uri);
+                const editor = await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                    preserveFocus: false
+                });
+
+                if (editor && activeFile.cursor >= 0) {
+                    const startPos = new vscode.Position(activeFile.cursor, activeFile.column || 0);
+
+                    if (activeFile.selectionEndCursor !== undefined && activeFile.selectionEndColumn !== undefined) {
+                        const endPos = new vscode.Position(activeFile.selectionEndCursor, activeFile.selectionEndColumn);
+                        // Check if selection needs update
+                        if (!editor.selection.start.isEqual(startPos) || !editor.selection.end.isEqual(endPos)) {
+                                Logger.log(`Setting selection to ${activeFile.cursor}:${activeFile.column} - ${activeFile.selectionEndCursor}:${activeFile.selectionEndColumn}`);
+                                editor.selection = new vscode.Selection(startPos, endPos);
+                                editor.revealRange(new vscode.Range(startPos, endPos), vscode.TextEditorRevealType.InCenter);
+                        }
+                    } else {
+                        const currentCursor = editor.selection.active;
+                        if (currentCursor.line !== activeFile.cursor || currentCursor.character !== (activeFile.column || 0) || !editor.selection.isEmpty) {
+                            Logger.log(`Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${fsPath}`);
+                            editor.selection = new vscode.Selection(startPos, startPos);
+                            editor.revealRange(new vscode.Range(startPos, startPos), vscode.TextEditorRevealType.InCenter);
+                        }
+                    }
+                }
+            } catch (e) {
+                Logger.error(`Failed to activate file ${activeFile.filePath}:`, e);
+            }
+        }
     }
 
     public checkPluginVersion(remoteNode: NodeInfo | undefined) {

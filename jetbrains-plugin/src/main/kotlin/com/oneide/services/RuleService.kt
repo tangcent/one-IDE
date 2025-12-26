@@ -11,7 +11,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import com.oneide.SyncService
 import com.oneide.utils.Debouncer
 import com.oneide.utils.Logger
 import java.io.File
@@ -100,8 +99,8 @@ class RuleService(private val project: Project) {
      * Registers file listeners and performs an initial sync check.
      */
     fun start() {
-        val syncService = SyncService.getInstance(project)
-        if (!syncService.getConfig().syncRules) {
+        val configService = ConfigService.getInstance(project)
+        if (!configService.getConfig().syncRules) {
             logger.info("AI Rule Sync is disabled.")
             return
         }
@@ -166,8 +165,7 @@ class RuleService(private val project: Project) {
     }
 
     private fun checkAndSync() {
-        val syncService = SyncService.getInstance(project)
-        if (!syncService.getConfig().syncRules) return
+        if (!ConfigService.getInstance(project).getConfig().syncRules) return
 
         val basePath = project.basePath ?: return
 
@@ -337,7 +335,6 @@ class RuleService(private val project: Project) {
     }
 
     private fun syncRules(sourceAi: String, targetAi: String, rootPath: String): Long {
-        val syncService = SyncService.getInstance(project)
         try {
             val aiTools = AITool.instance.getAllAIConfigs()
             val sourceConfig = aiTools[sourceAi] ?: return 0L

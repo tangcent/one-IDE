@@ -3,7 +3,7 @@ package com.oneide.services
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.oneide.models.IdeMetaData
 import com.oneide.models.State
-import com.oneide.models.FolderState
+import com.oneide.OneIde
 import org.junit.Test
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -18,8 +18,9 @@ class StateServiceTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         oneIdeDir = createTempDir("one-ide-test").toPath()
+        OneIde.oneIdeDir = oneIdeDir
         metaData = IdeMetaData(project)
-        stateService = StateService(oneIdeDir, metaData)
+        stateService = StateService(metaData)
     }
 
     override fun tearDown() {
@@ -46,7 +47,7 @@ class StateServiceTest : BasePlatformTestCase() {
             timestamp = System.currentTimeMillis(),
             source = "test-source",
             ide = "test-ide",
-            root = FolderState("/")
+            root = "/"
         )
 
         stateService.publishState(state, "leader-id")

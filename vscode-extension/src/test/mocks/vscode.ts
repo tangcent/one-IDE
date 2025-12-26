@@ -5,7 +5,7 @@
 
 export const workspace = {
     getWorkspaceFolder: () => null,
-    workspaceFolders: [],
+    workspaceFolders: [] as any[],
     getConfiguration: () => ({
         get: (key: string, defaultValue: any) => defaultValue
     }),
@@ -27,7 +27,7 @@ export const window = {
     onDidChangeVisibleTextEditors: () => ({ dispose: () => {} }),
     onDidChangeWindowState: () => ({ dispose: () => {} }),
     state: { focused: true },
-    activeTextEditor: undefined,
+    activeTextEditor: undefined as any,
     visibleTextEditors: [],
     tabGroups: { all: [], close: async () => {} },
     showTextDocument: async () => ({})
@@ -41,6 +41,9 @@ export const extensions = {
             version: '1.0.0'
         }
     })
+};
+export const commands = {
+    executeCommand: async (command: string, ...rest: any[]) => {}
 };
 export enum StatusBarAlignment { Left, Right }
 export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }

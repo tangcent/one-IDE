@@ -3,9 +3,9 @@ package com.oneide.services
 import com.google.gson.Gson
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.oneide.SyncService
+import com.oneide.utils.Logger
 import com.oneide.utils.PluginUtils
 import java.io.InputStreamReader
 
@@ -43,7 +43,6 @@ data class AIConfigJson(
  * to detect the currently active AI tool based on user configuration or installed plugins.
  */
 class AITool {
-    private val logger = Logger.getInstance(AITool::class.java)
     private val aiTools = mutableMapOf<String, AIConfig>()
 
     init {
@@ -67,10 +66,10 @@ class AITool {
                     config.tools.forEach { aiTools[it.name] = it }
                 }
             } else {
-                logger.error("ai-tools.json not found")
+                Logger.error("ai-tools.json not found")
             }
         } catch (e: Exception) {
-            logger.error("Failed to load ai-tools.json", e)
+            Logger.error("Failed to load ai-tools.json", e)
         }
     }
 
@@ -106,7 +105,7 @@ class AITool {
     fun detectCurrentTool(project: Project): String? {
         // 1. User Config
         val configuredTool = try {
-            SyncService.getInstance(project).getConfig().currentTool
+            ConfigService.getInstance(project).getConfig().currentTool
         } catch (_: Exception) {
             "Auto"
         }
@@ -133,7 +132,7 @@ class AITool {
             if (tool.plugins.isNotEmpty()) {
                 for (pluginId in tool.plugins) {
                     if (isPluginInstalled(pluginId)) {
-                        logger.info("Detected installed plugin $pluginId for ${tool.name}")
+                        Logger.info("Detected installed plugin $pluginId for ${tool.name}")
                         return tool.name
                     }
                 }

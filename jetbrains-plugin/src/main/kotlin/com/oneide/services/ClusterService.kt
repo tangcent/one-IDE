@@ -4,6 +4,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.intellij.openapi.project.Project
 import com.oneide.models.*
+import com.oneide.OneIde
 import com.oneide.services.cluster.roles.*
 import com.oneide.services.cluster.ClusterConstants
 import com.oneide.utils.Logger
@@ -25,14 +26,13 @@ import java.util.concurrent.TimeUnit
  * - CANDIDATE: A temporary state when a Follower detects an unhealthy Leader and attempts to become Leader.
  */
 class ClusterService(
-    oneIdeDir: File,
     private val nodeId: String,
     val project: Project,
     private val ideConnector: IdeConnector,
     private val stateService: StateService
 ) {
     private val logger = Logger.withProject(project)
-    private val clusterDir: File = File(oneIdeDir, "cluster")
+    private val clusterDir: File = OneIde.oneIdeDir.resolve("cluster").toFile()
 
     private var currentRole: IRole? = null
     private var roleType: Role = Role.FOLLOWER
@@ -86,8 +86,6 @@ class ClusterService(
         currentRole = newRole
         currentRole?.init()
     }
-
-    fun isLeader(): Boolean = roleType == Role.LEADER
 
     private fun onUserActivity() {
         currentRole?.onUserActivity()

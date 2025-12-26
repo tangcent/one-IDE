@@ -44,25 +44,17 @@
         "oneIde.ai.syncRules": {
           "type": "boolean",
           "default": true,
-          "description": "Enable AI Project Rules synchronization."
+          "description": "Whether to sync rules with the cluster."
         },
         "oneIde.ai.currentTool": {
           "type": "string",
+          "default": "Auto",
           "enum": [
             "Auto",
-            "Trae",
             "Cursor",
-            "Windsurf",
-            "Copilot",
-            "Claude",
-            "JetBrains",
-            "Junie",
-            "Qodo",
-            "Qoder",
-            "Antigravity"
+            "Trae"
           ],
-          "default": "Auto",
-          "description": "Explicitly set the current AI tool. Use 'Auto' to detect automatically."
+          "description": "The current tool being used."
         }
       }
     }

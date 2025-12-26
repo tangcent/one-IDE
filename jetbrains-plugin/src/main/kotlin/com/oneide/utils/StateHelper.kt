@@ -1,7 +1,7 @@
 package com.oneide.utils
 
 import com.oneide.models.ActiveFile
-import com.oneide.models.FolderState
+import com.oneide.models.EditorState
 import com.oneide.models.State
 import com.oneide.models.IdeMetaData
 import java.nio.file.Paths
@@ -42,8 +42,7 @@ object StateHelper {
             }
         }
 
-        val rootNode = FolderState(
-            path = rootPathLower,
+        val editorNode = EditorState(
             openedFiles = filePaths,
             activeFile = activeFileInRoot
         )
@@ -52,7 +51,8 @@ object StateHelper {
             timestamp = System.currentTimeMillis(),
             source = metaData.id,
             ide = metaData.ide,
-            root = rootNode
+            root = rootPathLower,
+            editorState = editorNode
         )
     }
 
@@ -66,7 +66,7 @@ object StateHelper {
     fun getFiles(state: State, rootPath: String): List<String> {
         val normalizedRootPath = rootPath.normalizePath()
 
-        return state.root.openedFiles.filter { f ->
+        return state.editorState.openedFiles.filter { f ->
             val fPath = f.normalizePath()
             fPath.startsWith(normalizedRootPath)
         }
@@ -81,7 +81,7 @@ object StateHelper {
      */
     fun getActiveFile(state: State, rootPath: String): ActiveFile? {
         val normalizedRootPath = rootPath.normalizePath()
-        val active = state.root.activeFile ?: return null
+        val active = state.editorState.activeFile ?: return null
 
         if (active.filePath.normalizePath().startsWith(normalizedRootPath)) {
             return active
@@ -97,7 +97,7 @@ object StateHelper {
      * @return True if there is an intersection
      */
     fun hasIntersection(pathOrState1: Any, path2: String): Boolean {
-        val p1Raw = if (pathOrState1 is State) pathOrState1.root.path else pathOrState1.toString()
+        val p1Raw = if (pathOrState1 is State) pathOrState1.root else pathOrState1.toString()
         val p1 = p1Raw.normalizePath()
         val p2 = path2.normalizePath()
         return p1.startsWith(p2) || p2.startsWith(p1)
@@ -125,7 +125,7 @@ object StateHelper {
      * @return True if the file belongs to the state root
      */
     fun checkPathBelongsToState(state: State, filePath: String): Boolean {
-        return isInsideRoot(state.root.path, filePath)
+        return isInsideRoot(state.root, filePath)
     }
 
     /**

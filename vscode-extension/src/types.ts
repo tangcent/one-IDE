@@ -6,8 +6,7 @@ export interface ActiveFile {
     selectionEndColumn?: number;
 }
 
-export interface FolderState {
-    path: string;
+export interface EditorState {
     openedFiles: string[];
     activeFile?: ActiveFile;
 }
@@ -16,7 +15,8 @@ export interface State {
     timestamp: number;
     source: string;
     ide: 'jetbrains' | 'vscode';
-    root: FolderState;
+    root: string;
+    editorState: EditorState;
 }
 
 export interface Config {

@@ -1,4 +1,4 @@
-import { FolderState, ActiveFile, State } from '../types';
+import { EditorState, ActiveFile, State } from '../types';
 import { IdeMetaData } from '../IdeMetaData';
 import * as path from 'path';
 import { PathUtils } from '../utils/PathUtils';
@@ -19,7 +19,7 @@ export class StateHelper {
         const filePaths: string[] = openedFiles
             .filter(f => PathUtils.normalizePath(f).startsWith(rootPathLower))
             .map(f => PathUtils.normalizePath(f));
-
+        
         let activeFileInRoot: ActiveFile | undefined = undefined;
         if (activeFile) {
             const activePathLower = PathUtils.normalizePath(activeFile.filePath);
@@ -31,8 +31,7 @@ export class StateHelper {
             }
         }
 
-        const rootNode: FolderState = {
-            path: rootPathLower,
+        const editorState: EditorState = {
             openedFiles: filePaths,
             activeFile: activeFileInRoot
         };
@@ -42,7 +41,8 @@ export class StateHelper {
             timestamp: Date.now(),
             source: meta.id,
             ide: meta.ide,
-            root: rootNode
+            root: rootPathLower,
+            editorState: editorState
         };
     }
 
@@ -54,7 +54,7 @@ export class StateHelper {
      * @returns True if there is an intersection
      */
     public static hasIntersection(pathOrState1: string | State, path2: string): boolean {
-        const p1Raw = typeof pathOrState1 === 'string' ? pathOrState1 : pathOrState1.root.path;
+        const p1Raw = typeof pathOrState1 === 'string' ? pathOrState1 : pathOrState1.root;
         const p1 = PathUtils.normalizePath(p1Raw);
         const p2 = PathUtils.normalizePath(path2);
         return p1.startsWith(p2) || p2.startsWith(p1);
@@ -82,7 +82,7 @@ export class StateHelper {
      * @returns True if the file belongs to the state root
      */
     public static checkPathBelongsToState(state: State, filePath: string): boolean {
-        return StateHelper.isInsideRoot(state.root.path, filePath);
+        return StateHelper.isInsideRoot(state.root, filePath);
     }
 
     /**
@@ -95,11 +95,11 @@ export class StateHelper {
     public static getFiles(state: State, rootPath: string): string[] {
         const normalizedRootPath = PathUtils.normalizePath(rootPath);
 
-        if (!state.root || !state.root.openedFiles) {
+        if (!state.editorState || !state.editorState.openedFiles) {
             return [];
         }
 
-        return state.root.openedFiles.filter(f => {
+        return state.editorState.openedFiles.filter(f => {
             try {
                 const fPath = PathUtils.normalizePath(f);
                 return fPath.startsWith(normalizedRootPath);
@@ -118,7 +118,7 @@ export class StateHelper {
      */
     public static getActiveFile(state: State, rootPath: string): ActiveFile | undefined {
         const normalizedRootPath = PathUtils.normalizePath(rootPath);
-        const active = state.root.activeFile;
+        const active = state.editorState.activeFile;
         if (!active) return undefined;
 
         if (PathUtils.normalizePath(active.filePath).startsWith(normalizedRootPath)) {

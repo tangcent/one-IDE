@@ -15,8 +15,7 @@ data class ActiveFile(
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class FolderState(
-    val path: String = "",
+data class EditorState(
     val openedFiles: MutableList<String> = mutableListOf(),
     val activeFile: ActiveFile? = null
 )
@@ -27,7 +26,8 @@ data class State(
     val timestamp: Long = 0,
     val source: String = "",
     val ide: String = "",
-    val root: FolderState = FolderState()
+    val root: String = "",
+    val editorState: EditorState = EditorState()
 )
 
 enum class Role {

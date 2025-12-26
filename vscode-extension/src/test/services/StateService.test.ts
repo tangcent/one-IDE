@@ -41,7 +41,11 @@ describe('StateService', () => {
                 timestamp: Date.now() - 1000,
                 source: 'test-source',
                 ide: 'vscode',
-                root: { path: '/', openedFiles: [] }
+                root: '/',
+                editorState: {
+                    openedFiles: [],
+                    activeFile: undefined
+                }
             };
 
             service.publishState(state, 'leader-id');
@@ -53,8 +57,8 @@ describe('StateService', () => {
             timestamp: Date.now(),
             source: 'test-source',
             ide: 'vscode',
-            root: {
-                path: '/root',
+            root: '/root',
+            editorState: {
                 openedFiles: [
                     'file1',
                     'file2'
@@ -81,17 +85,17 @@ describe('StateService', () => {
 
             try {
                 // Check root
-                assert.strictEqual(json.state.root.path, '/root');
+                assert.strictEqual(json.state.root, '/root');
                 
                 // Check openedFiles
-                assert.strictEqual(json.state.root.openedFiles.length, 2);
+                assert.strictEqual(json.state.editorState.openedFiles.length, 2);
                 
                 // Check file1
-                const file1 = json.state.root.openedFiles[0];
+                const file1 = json.state.editorState.openedFiles[0];
                 assert.strictEqual(file1, 'file1');
                 
                 // Check activeFile
-                const active = json.state.root.activeFile;
+                const active = json.state.editorState.activeFile;
                 assert.strictEqual(active.filePath, 'file2');
                 assert.strictEqual(active.cursor, 10);
                 assert.strictEqual(active.column, 5);
