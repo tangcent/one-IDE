@@ -2,6 +2,12 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.1] - 2025-12-26
+- feat: notify user on plugin version mismatch across IDEs
+- chore(logger): add MetaDataLogger for simplified logging with context
+- refactor(cluster): remove node heartbeat functionality
+- refactor(state): simplify state structure
+
 ## [1.1.0] - 2025-12-25
 - feat:Add debouncer to prevent rapid consecutive state applications from other IDEs
 - refactor(state): simplify state structure
