@@ -2,6 +2,8 @@ export interface ActiveFile {
     filePath: string;
     cursor: number;
     column?: number;
+    selectionEndCursor?: number;
+    selectionEndColumn?: number;
 }
 
 export interface FolderState {

@@ -183,7 +183,7 @@ class ClusterService(
                     lockDir.delete()
                     return lockDir.mkdir()
                 }
-            } catch (e2: Exception) {
+            } catch (_: Exception) {
                 return false
             }
             return false
@@ -193,7 +193,7 @@ class ClusterService(
     private fun releaseLock(lockDir: File) {
         try {
             lockDir.delete()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // ignore
         }
     }

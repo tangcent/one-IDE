@@ -1,6 +1,7 @@
 package com.oneide.services
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
@@ -134,37 +135,61 @@ class IdeConnector(private val project: Project, private val configService: Conf
      * Captures the current state of the IDE (opened files, active file, cursor positions).
      */
     fun captureState(): State {
-        val rootPath = project.basePath ?: ""
+        return ApplicationManager.getApplication().runReadAction(Computable {
+            val rootPath = project.basePath ?: ""
 
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        val openFiles = fileEditorManager.openFiles
-        val selectedFiles = fileEditorManager.selectedFiles
-        val activePath = if (selectedFiles.isNotEmpty()) selectedFiles[0].path else null
+            val fileEditorManager = FileEditorManager.getInstance(project)
+            val openFiles = fileEditorManager.openFiles
+            val selectedFiles = fileEditorManager.selectedFiles
+            val activePath = if (selectedFiles.isNotEmpty()) selectedFiles[0].path else null
 
-        val openedFilesList = mutableListOf<String>()
-        var activeFile: ActiveFile? = null
+            val openedFilesList = mutableListOf<String>()
+            var activeFile: ActiveFile? = null
 
-        for (file in openFiles) {
-            val path = file.path
-            if (!configService.shouldSyncFile(path)) continue
+            for (file in openFiles) {
+                val path = file.path
+                if (configService.shouldSyncFile(path)) {
+                    openedFilesList.add(path)
 
-            openedFilesList.add(path)
+                    if (path == activePath) {
+                        // Get cursor for active file
+                        var cursor = 0
+                        var column = 0
+                        var selectionEndCursor: Int? = null
+                        var selectionEndColumn: Int? = null
+                        val editor = fileEditorManager.getSelectedEditor(file)
+                        if (editor is TextEditor) {
+                            val selectionModel = editor.editor.selectionModel
+                            if (selectionModel.hasSelection()) {
+                                val startOffset = selectionModel.selectionStart
+                                val endOffset = selectionModel.selectionEnd
 
-            if (path == activePath) {
-                // Get cursor for active file
-                var cursor = 0
-                var column = 0
-                val editor = fileEditorManager.getSelectedEditor(file)
-                if (editor is TextEditor) {
-                    val logicalPosition = editor.editor.caretModel.logicalPosition
-                    cursor = logicalPosition.line
-                    column = logicalPosition.column
+                                val startPos = editor.editor.offsetToLogicalPosition(startOffset)
+                                val endPos = editor.editor.offsetToLogicalPosition(endOffset)
+
+                                cursor = startPos.line
+                                column = startPos.column
+                                selectionEndCursor = endPos.line
+                                selectionEndColumn = endPos.column
+                            } else {
+                                val logicalPosition = editor.editor.caretModel.logicalPosition
+                                cursor = logicalPosition.line
+                                column = logicalPosition.column
+                            }
+                        }
+                        activeFile = ActiveFile(
+                            filePath = path,
+                            cursor = cursor,
+                            column = column,
+                            selectionEndCursor = selectionEndCursor,
+                            selectionEndColumn = selectionEndColumn
+                        )
+                    }
                 }
-                activeFile = ActiveFile(filePath = path, cursor = cursor, column = column)
             }
-        }
 
-        return StateHelper.buildState(metaData, rootPath, openedFilesList, activeFile)
+            StateHelper.buildState(metaData, rootPath, openedFilesList, activeFile)
+        })
     }
 
     /**
@@ -246,18 +271,41 @@ class IdeConnector(private val project: Project, private val configService: Conf
                             if (textEditor != null) {
                                 val caretModel = textEditor.editor.caretModel
                                 val scrollingModel = textEditor.editor.scrollingModel
+                                val selectionModel = textEditor.editor.selectionModel
 
-                                if (caretModel.logicalPosition.line != activeFile.cursor || caretModel.logicalPosition.column != activeFile.column) {
-                                    logger.info(
-                                        "Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${activeFile.filePath}"
-                                    )
-                                    caretModel.moveToLogicalPosition(
-                                        com.intellij.openapi.editor.LogicalPosition(
-                                            activeFile.cursor,
-                                            activeFile.column
+                                val newCursor = activeFile.cursor
+                                val newColumn = activeFile.column
+                                val newEndCursor = activeFile.selectionEndCursor
+                                val newEndColumn = activeFile.selectionEndColumn
+
+                                if (newEndCursor != null && newEndColumn != null) {
+                                    // Apply selection
+                                    val startPos = com.intellij.openapi.editor.LogicalPosition(newCursor, newColumn)
+                                    val endPos = com.intellij.openapi.editor.LogicalPosition(newEndCursor, newEndColumn)
+                                    
+                                    val startOffset = textEditor.editor.logicalPositionToOffset(startPos)
+                                    val endOffset = textEditor.editor.logicalPositionToOffset(endPos)
+                                    
+                                    if (selectionModel.selectionStart != startOffset || selectionModel.selectionEnd != endOffset) {
+                                        logger.info("Setting selection to $newCursor:$newColumn - $newEndCursor:$newEndColumn")
+                                        selectionModel.setSelection(startOffset, endOffset)
+                                        caretModel.moveToLogicalPosition(endPos)
+                                        scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                    }
+                                } else {
+                                    if (caretModel.logicalPosition.line != newCursor || caretModel.logicalPosition.column != newColumn) {
+                                        logger.info(
+                                            "Moving cursor to $newCursor:$newColumn in ${activeFile.filePath}"
                                         )
-                                    )
-                                    scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                        caretModel.moveToLogicalPosition(
+                                            com.intellij.openapi.editor.LogicalPosition(
+                                                newCursor,
+                                                newColumn
+                                            )
+                                        )
+                                        selectionModel.removeSelection()
+                                        scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                    }
                                 }
                             } else {
                                 logger.warn("TextEditor is null for $virtualFile")

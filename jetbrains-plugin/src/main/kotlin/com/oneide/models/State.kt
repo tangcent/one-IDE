@@ -8,7 +8,9 @@ import com.fasterxml.jackson.annotation.JsonInclude
 data class ActiveFile(
     val filePath: String = "",
     val cursor: Int = 0,
-    val column: Int = 0
+    val column: Int = 0,
+    val selectionEndCursor: Int? = null,
+    val selectionEndColumn: Int? = null
 )
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)

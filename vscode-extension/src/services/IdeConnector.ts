@@ -99,14 +99,28 @@ export class IdeConnector {
                     if (activePath && PathUtils.normalizePath(fsPath) === PathUtils.normalizePath(activePath)) {
                         let cursor = 0;
                         let column = 0;
+                        let selectionEndCursor: number | undefined;
+                        let selectionEndColumn: number | undefined;
+
                         if (activeEditor) {
-                            cursor = activeEditor.selection.active.line;
-                            column = activeEditor.selection.active.character;
+                            if (!activeEditor.selection.isEmpty) {
+                                // Use start as cursor/column
+                                cursor = activeEditor.selection.start.line;
+                                column = activeEditor.selection.start.character;
+                                
+                                selectionEndCursor = activeEditor.selection.end.line;
+                                selectionEndColumn = activeEditor.selection.end.character;
+                            } else {
+                                cursor = activeEditor.selection.active.line;
+                                column = activeEditor.selection.active.character;
+                            }
                         }
                         activeFile = {
                             filePath: fsPath,
                             cursor: cursor,
-                            column: column
+                            column: column,
+                            selectionEndCursor: selectionEndCursor,
+                            selectionEndColumn: selectionEndColumn
                         };
                     }
                 }
@@ -210,12 +224,23 @@ export class IdeConnector {
                         });
 
                         if (editor && activeFile.cursor >= 0) {
-                            const currentCursor = editor.selection.active;
-                            if (currentCursor.line !== activeFile.cursor || currentCursor.character !== (activeFile.column || 0)) {
-                                Logger.log(`Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${fsPath}`);
-                                const newPos = new vscode.Position(activeFile.cursor, activeFile.column || 0);
-                                editor.selection = new vscode.Selection(newPos, newPos);
-                                editor.revealRange(new vscode.Range(newPos, newPos), vscode.TextEditorRevealType.InCenter);
+                            const startPos = new vscode.Position(activeFile.cursor, activeFile.column || 0);
+
+                            if (activeFile.selectionEndCursor !== undefined && activeFile.selectionEndColumn !== undefined) {
+                                const endPos = new vscode.Position(activeFile.selectionEndCursor, activeFile.selectionEndColumn);
+                                // Check if selection needs update
+                                if (!editor.selection.start.isEqual(startPos) || !editor.selection.end.isEqual(endPos)) {
+                                     Logger.log(`Setting selection to ${activeFile.cursor}:${activeFile.column} - ${activeFile.selectionEndCursor}:${activeFile.selectionEndColumn}`);
+                                     editor.selection = new vscode.Selection(startPos, endPos);
+                                     editor.revealRange(new vscode.Range(startPos, endPos), vscode.TextEditorRevealType.InCenter);
+                                }
+                            } else {
+                                const currentCursor = editor.selection.active;
+                                if (currentCursor.line !== activeFile.cursor || currentCursor.character !== (activeFile.column || 0) || !editor.selection.isEmpty) {
+                                    Logger.log(`Moving cursor to ${activeFile.cursor}:${activeFile.column} in ${fsPath}`);
+                                    editor.selection = new vscode.Selection(startPos, startPos);
+                                    editor.revealRange(new vscode.Range(startPos, startPos), vscode.TextEditorRevealType.InCenter);
+                                }
                             }
                         }
                     } catch (e) {
