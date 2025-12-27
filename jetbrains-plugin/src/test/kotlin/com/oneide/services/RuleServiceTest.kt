@@ -39,7 +39,7 @@ class RuleServiceTest {
         assertEquals(200, rule.lastModified)
         
         // Check content format
-        val expectedContent = "### rule1.md\n\ncontent1\n\n### rule2.md\n\ncontent2\n\n"
+        val expectedContent = "content1\n\ncontent2\n\n"
         assertEquals(expectedContent, rule.content)
     }
 }

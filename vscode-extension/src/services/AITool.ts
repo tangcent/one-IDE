@@ -17,6 +17,8 @@ export interface AIConfig {
     ruleRoot: string;
     /** The rule syncing strategy: "folder" (syncs entire directory) or "single-file". */
     strategy: 'folder' | 'single-file';
+    /** The preferred file extension for rules (e.g., ".md", ".mdc"). */
+    preferredExtension?: string;
     /** List of plugin IDs (extensions) associated with this tool for detection purposes. */
     plugins: string[];
 }

@@ -38,7 +38,7 @@ describe('RuleBuilders', () => {
             assert.strictEqual(rule.path, '.codiumai.toml');
             
             // Check content format
-            const expectedContent = "### rule1.md\n\ncontent1\n\n### rule2.md\n\ncontent2\n\n";
+            const expectedContent = "content1\n\ncontent2\n\n";
             assert.strictEqual(rule.content, expectedContent);
         });
     });

@@ -36,11 +36,21 @@ interface RuleBuilder {
  *
  * @property ruleRoot The root directory for the rules.
  */
-class FolderRuleBuilder(private val ruleRoot: String) : RuleBuilder {
+class FolderRuleBuilder(private val ruleRoot: String, private val preferredExtension: String? = null) : RuleBuilder {
     override fun buildRules(sourceFiles: List<RuleFile>, sourceAi: String): List<RuleFile> {
         return sourceFiles.map { file ->
             var name = File(file.path).name
-            if (!name.endsWith(".md") && !name.endsWith(".mdc")) name += ".md"
+
+            if (preferredExtension != null) {
+                if (name.endsWith(".md") || name.endsWith(".mdc")) {
+                    val ext = if (name.endsWith(".md")) ".md" else ".mdc"
+                    name = name.substring(0, name.length - ext.length) + preferredExtension
+                } else if (!name.endsWith(preferredExtension)) {
+                    name += preferredExtension
+                }
+            } else {
+                if (!name.endsWith(".md") && !name.endsWith(".mdc")) name += ".md"
+            }
             // name = "${sourceAi.lowercase()}_$name" // Keep original filename
 
             val path = if (ruleRoot.isEmpty()) name else "$ruleRoot/$name"
@@ -57,13 +67,14 @@ class FolderRuleBuilder(private val ruleRoot: String) : RuleBuilder {
  */
 class SingleFileRuleBuilder(private val targetPath: String) : RuleBuilder {
     override fun buildRules(sourceFiles: List<RuleFile>, sourceAi: String): List<RuleFile> {
+        // Iterate through each source file and extract its content
         val sb = StringBuilder()
         var maxTime = 0L
         for (file in sourceFiles) {
-            sb.append("### ").append(File(file.path).name).append("\n\n")
             sb.append(file.content).append("\n\n")
             if (file.lastModified > maxTime) maxTime = file.lastModified
         }
+        // Return the single target file with the merged content
         return listOf(RuleFile(targetPath, sb.toString(), maxTime))
     }
 }
@@ -330,7 +341,7 @@ class RuleService(private val project: Project) {
         return if (targetConfig.strategy == "single-file") {
             SingleFileRuleBuilder(targetConfig.ruleRoot)
         } else {
-            FolderRuleBuilder(targetConfig.ruleRoot)
+            FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.preferredExtension)
         }
     }
 
