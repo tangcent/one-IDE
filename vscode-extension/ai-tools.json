@@ -5,6 +5,7 @@
             "patterns": [".cursorrules", ".cursor/rules/**/*"],
             "ruleRoot": ".cursor/rules",
             "strategy": "folder",
+            "preferredExtension": ".mdc",
             "plugins": []
         },
         {
@@ -12,6 +13,7 @@
             "patterns": [".trae/rules/**/*"],
             "ruleRoot": ".trae/rules",
             "strategy": "folder",
+            "preferredExtension": ".md",
             "plugins": ["MarsCode.marscode-extension"]
         },
         {

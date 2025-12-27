@@ -36,11 +36,21 @@ interface RuleBuilder {
  *
  * @property ruleRoot The root directory for the rules.
  */
-class FolderRuleBuilder(private val ruleRoot: String) : RuleBuilder {
+class FolderRuleBuilder(private val ruleRoot: String, private val preferredExtension: String? = null) : RuleBuilder {
     override fun buildRules(sourceFiles: List<RuleFile>, sourceAi: String): List<RuleFile> {
         return sourceFiles.map { file ->
             var name = File(file.path).name
-            if (!name.endsWith(".md") && !name.endsWith(".mdc")) name += ".md"
+
+            if (preferredExtension != null) {
+                if (name.endsWith(".md") || name.endsWith(".mdc")) {
+                    val ext = if (name.endsWith(".md")) ".md" else ".mdc"
+                    name = name.substring(0, name.length - ext.length) + preferredExtension
+                } else if (!name.endsWith(preferredExtension)) {
+                    name += preferredExtension
+                }
+            } else {
+                if (!name.endsWith(".md") && !name.endsWith(".mdc")) name += ".md"
+            }
             // name = "${sourceAi.lowercase()}_$name" // Keep original filename
 
             val path = if (ruleRoot.isEmpty()) name else "$ruleRoot/$name"
@@ -330,7 +340,7 @@ class RuleService(private val project: Project) {
         return if (targetConfig.strategy == "single-file") {
             SingleFileRuleBuilder(targetConfig.ruleRoot)
         } else {
-            FolderRuleBuilder(targetConfig.ruleRoot)
+            FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.preferredExtension)
         }
     }
 

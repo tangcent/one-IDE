@@ -16,6 +16,7 @@ import java.io.InputStreamReader
  * @property patterns List of glob patterns to identify rule files associated with this tool.
  * @property ruleRoot The root directory or file path where rules for this tool are stored.
  * @property strategy The rule syncing strategy: "folder" (syncs entire directory) or "single-file".
+ * @property preferredExtension The preferred file extension for rules (e.g., ".md", ".mdc").
  * @property plugins List of plugin IDs (extensions) associated with this tool for detection purposes.
  */
 data class AIConfig(
@@ -23,6 +24,7 @@ data class AIConfig(
     val patterns: List<String>,
     val ruleRoot: String,
     val strategy: String,
+    val preferredExtension: String? = null,
     val plugins: List<String> = emptyList()
 )
 

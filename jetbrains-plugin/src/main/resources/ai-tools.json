@@ -8,6 +8,7 @@
             ],
             "ruleRoot": ".cursor/rules",
             "strategy": "folder",
+            "preferredExtension": ".mdc",
             "plugins": []
         },
         {
@@ -17,6 +18,7 @@
             ],
             "ruleRoot": ".trae/rules",
             "strategy": "folder",
+            "preferredExtension": ".md",
             "plugins": [
                 "com.marscode"
             ]
