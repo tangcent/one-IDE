@@ -3,7 +3,7 @@
   "displayName": "One-IDE",
   "icon": "icon.png",
   "description": "Seamlessly sync your editors across JetBrains IDEs and VS Code, with automatic AI project rule adaptation.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "engines": {
     "vscode": "^1.85.0"
   },
