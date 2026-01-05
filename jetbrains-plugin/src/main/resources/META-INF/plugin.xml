@@ -4,8 +4,7 @@
     <vendor email="pentatangcent@gmail.com" url="https://github.com/tangcent/one-IDE">tangcent</vendor>
     <description>
         <![CDATA[
-        <p>One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools.</p>
-        <p>Beyond file tracking, the extension automatically detects and adapts AI project rules between platforms. For example, if you update project rules in Cursor, Trae will instantly detect the changes, convert them to its native format, and apply them to the correct location.</p>
+        <!-- Description injected by Gradle -->
         ]]>
     </description>
     <depends>com.intellij.modules.platform</depends>
