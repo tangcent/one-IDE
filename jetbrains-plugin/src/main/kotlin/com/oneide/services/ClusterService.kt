@@ -34,6 +34,8 @@ class ClusterService(
     private val logger = Logger.withProject(project)
     private val clusterDir: File = OneIde.oneIdeDir.resolve("cluster").toFile()
 
+    private var isPaused = false
+
     private var currentRole: IRole? = null
     private var roleType: Role = Role.FOLLOWER
 
@@ -55,6 +57,15 @@ class ClusterService(
 
         // Start as Follower
         becomeFollower()
+    }
+
+    fun setPaused(paused: Boolean) {
+        isPaused = paused
+        if (paused) {
+            logger.info("ClusterService paused")
+        } else {
+            logger.info("ClusterService resumed")
+        }
     }
 
     fun getIdeConnector(): IdeConnector = ideConnector
@@ -88,10 +99,12 @@ class ClusterService(
     }
 
     private fun onUserActivity() {
+        if (isPaused) return
         currentRole?.onUserActivity()
     }
 
     private fun onStateReceived(state: State) {
+        if (isPaused) return
         if (roleType == Role.FOLLOWER) {
             ideConnector.applyState(state)
         }
@@ -100,7 +113,9 @@ class ClusterService(
     private fun startHeartbeat() {
         scheduler.scheduleAtFixedRate({
             try {
-                currentRole?.onHeartbeat()
+                if (!isPaused) {
+                    currentRole?.onHeartbeat()
+                }
             } catch (e: Exception) {
                 // ignore
             }

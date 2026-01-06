@@ -43,6 +43,8 @@ export class ClusterService {
     // File paths
     private leaderFile: string;
 
+    private isPaused = false;
+
     constructor(
         private ideConnector: IdeConnector,
         private stateService: StateService
@@ -59,6 +61,15 @@ export class ClusterService {
         this.leaderFile = path.join(this.clusterDir, 'leader.json');
 
         this.init();
+    }
+
+    public setPaused(paused: boolean) {
+        this.isPaused = paused;
+        if (paused) {
+            Logger.log('ClusterService paused');
+        } else {
+            Logger.log('ClusterService resumed');
+        }
     }
 
     private async init() {
@@ -105,12 +116,14 @@ export class ClusterService {
     // --- Events ---
 
     private async onUserActivity() {
+        if (this.isPaused) return;
         if (this.currentRole) {
             await this.currentRole.onUserActivity();
         }
     }
 
     private async onStateReceived(state: State) {
+        if (this.isPaused) return;
         if (this.roleType === RoleType.FOLLOWER) {
             await this.ideConnector.applyState(state);
         }
@@ -198,6 +211,7 @@ export class ClusterService {
 
     private startHeartbeat() {
         this.heartbeatInterval = setInterval(async () => {
+            if (this.isPaused) return;
             if (this.currentRole) {
                 await this.currentRole.onHeartbeat();
             }

@@ -56,11 +56,8 @@ export class SyncService implements vscode.Disposable {
     public toggleSync() {
         this.isEnabled = !this.isEnabled;
         this.updateStatusBar();
+        this.clusterService.setPaused(!this.isEnabled);
         vscode.window.showInformationMessage(`One-IDE Sync: ${this.isEnabled ? 'Enabled' : 'Disabled'}`);
-        // TODO: Actually pause/resume cluster service or connector?
-        // For now, IdeConnector could check this flag, or we can just ignore it for the sake of simplicity 
-        // as the requirement is to refactor architecture. 
-        // But if we want to support toggle, we should probably propagate it.
     }
 
     private updateStatusBar() {

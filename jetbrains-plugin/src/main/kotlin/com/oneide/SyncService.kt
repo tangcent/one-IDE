@@ -38,6 +38,7 @@ class SyncService(private val project: Project) : Disposable {
         set(value) {
             field = value
             logger.info("One-IDE Sync enabled: $value")
+            clusterService.setPaused(!value)
             updateAllStatusBars()
         }
 
