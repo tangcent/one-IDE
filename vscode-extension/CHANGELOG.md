@@ -2,6 +2,9 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.3] - 2026-01-06
+- feat(sync): add pause/resume functionality to cluster service
+
 ## [1.1.2] - 2025-12-27
 - feat(rules): add preferred extension support for rule files
 - feat: add support for text selection synchronization
