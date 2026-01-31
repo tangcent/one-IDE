@@ -2,114 +2,70 @@
     "tools": [
         {
             "name": "Cursor",
-            "patterns": [
-                ".cursorrules",
-                ".cursor/rules/**/*"
-            ],
             "ruleRoot": ".cursor/rules",
             "strategy": "folder",
-            "preferredExtension": ".mdc",
+            "extension": ".mdc",
             "plugins": []
         },
         {
             "name": "Trae",
-            "patterns": [
-                ".trae/rules/**/*"
-            ],
             "ruleRoot": ".trae/rules",
             "strategy": "folder",
-            "preferredExtension": ".md",
-            "plugins": [
-                "com.marscode"
-            ]
+            "extension": ".md",
+            "plugins": ["com.marscode"]
         },
         {
             "name": "Windsurf",
-            "patterns": [
-                ".windsurfrules",
-                ".windsurf/rules/**/*"
-            ],
             "ruleRoot": ".windsurf/rules",
             "strategy": "folder",
-            "plugins": [
-                "com.codeium.intellij"
-            ]
+            "extension": ".md",
+            "plugins": ["com.codeium.intellij"]
         },
         {
             "name": "Claude",
-            "patterns": [
-                ".claude/rules/**/*",
-                ".claude.json"
-            ],
             "ruleRoot": ".claude/rules",
             "strategy": "folder",
-            "plugins": [
-                "com.anthropic.code.plugin"
-            ]
+            "extension": ".md",
+            "plugins": ["com.anthropic.code.plugin"]
         },
         {
             "name": "Copilot",
-            "patterns": [
-                ".github/copilot-instructions.md"
-            ],
             "ruleRoot": ".github/copilot-instructions.md",
             "strategy": "single-file",
-            "plugins": [
-                "com.github.copilot"
-            ]
+            "plugins": ["com.github.copilot"]
         },
         {
             "name": "JetBrains",
-            "patterns": [
-                ".aiassistant/rules/**/*"
-            ],
             "ruleRoot": ".aiassistant/rules",
             "strategy": "folder",
-            "plugins": [
-                "com.intellij.ml.llm"
-            ]
+            "extension": ".md",
+            "plugins": ["com.intellij.ml.llm"]
         },
         {
             "name": "junie",
-            "patterns": [
-                ".junie/**/*"
-            ],
             "ruleRoot": ".junie",
             "strategy": "folder",
-            "plugins": [
-                "org.jetbrains.junie"
-            ]
+            "extension": ".md",
+            "plugins": ["org.jetbrains.junie"]
         },
         {
             "name": "Qodo",
-            "patterns": [
-                ".codiumai.toml",
-                ".codiumai.yaml"
-            ],
             "ruleRoot": ".codiumai.toml",
             "strategy": "single-file",
-            "plugins": [
-                "codiumai.codiumai"
-            ]
+            "plugins": ["codiumai.codiumai"]
         },
         {
             "name": "qoder",
-            "patterns": [
-                ".qoder/**/*"
-            ],
             "ruleRoot": ".qoder",
             "strategy": "folder",
-            "plugins": [
-                "com.qoder"
-            ]
+            "extension": ".md",
+            "plugins": ["com.qoder"]
         },
         {
             "name": "Antigravity",
-            "patterns": [
-                ".antigravity/rules/**/*"
-            ],
             "ruleRoot": ".antigravity/rules",
             "strategy": "folder",
+            "extension": ".md",
             "plugins": []
         }
     ]

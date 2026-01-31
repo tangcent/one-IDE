@@ -2,17 +2,23 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { minimatch } from 'minimatch';
 import { Logger } from '../logger';
 import { Debouncer } from '../utils/Debouncer';
 import { IdeMetaData } from '../IdeMetaData';
 import { AITool, AIConfig } from './AITool';
 import { ConfigService } from './ConfigService';
+import { ClusterService, RoleType } from './ClusterService';
 import { LocalStorage } from './LocalStorage';
 
 interface RuleFile {
     path: string; // relative path from rule root
     content: string;
+}
+
+interface RuleStat {
+    ai: string;
+    file: string;
+    mtime: number;
 }
 
 interface SyncState {
@@ -33,22 +39,20 @@ interface RuleBuilder {
  * Builds rules for tools that support folder-based rule structure.
  */
 export class FolderRuleBuilder implements RuleBuilder {
-    constructor(private ruleRoot: string, private preferredExtension?: string) { }
+    constructor(private ruleRoot: string, private extension?: string) { }
 
     buildRules(sourceFiles: Array<{ path: string, content: string }>, sourceAi: string): RuleFile[] {
         return sourceFiles.map(file => {
             const fileName = path.basename(file.path);
             let name = fileName;
 
-            if (this.preferredExtension) {
+            if (this.extension) {
                 const ext = path.extname(name);
-                if (ext === '.md' || ext === '.mdc') {
-                    name = name.substring(0, name.length - ext.length) + this.preferredExtension;
-                } else if (!name.endsWith(this.preferredExtension)) {
-                    name += this.preferredExtension;
+                if (ext && ext !== this.extension) {
+                    name = name.substring(0, name.length - ext.length) + this.extension;
+                } else if (!ext) {
+                    name += this.extension;
                 }
-            } else {
-                if (!name.endsWith('.md') && !name.endsWith('.mdc')) name += '.md';
             }
 
             const rulePath = this.ruleRoot ? path.join(this.ruleRoot, name) : name;
@@ -87,83 +91,92 @@ export class SingleFileRuleBuilder implements RuleBuilder {
  * It monitors file changes and triggers synchronization when rules are modified.
  */
 export class RuleService {
-    private watcher: vscode.FileSystemWatcher | undefined;
     private debouncer = new Debouncer(1000); // 1 second debounce
     private currentAppName: string;
     private configService: ConfigService;
+    private clusterService: ClusterService;
+    private unsubscribeRoleChange: (() => void) | undefined;
 
-    constructor(configService: ConfigService) {
+    constructor(configService: ConfigService, clusterService: ClusterService) {
         this.configService = configService;
+        this.clusterService = clusterService;
         this.currentAppName = IdeMetaData.getInstance().appName;
         Logger.log(`RuleService initialized. Detected App Name: ${this.currentAppName}`);
     }
 
     /**
      * Starts the RuleService.
-     * Registers file listeners and performs an initial sync check.
+     * Triggers synchronization only when this instance becomes the cluster Leader.
      */
     public start() {
-        this.watcher = vscode.workspace.createFileSystemWatcher('**/*');
-        this.watcher.onDidChange(uri => this.onRuleChanged(uri));
-        this.watcher.onDidCreate(uri => this.onRuleChanged(uri));
-        this.watcher.onDidDelete(uri => this.onRuleChanged(uri));
-
-        // Initial sync
-        this.checkAndSync();
+        this.unsubscribeRoleChange = this.clusterService.addRoleChangeListener((role) => {
+            if (role !== RoleType.LEADER) return;
+            this.debouncer.debounce(() => this.checkAndSync());
+        });
     }
 
     public dispose() {
-        this.watcher?.dispose();
+        this.unsubscribeRoleChange?.();
         this.debouncer.cancel();
     }
 
-    private onRuleChanged(uri: vscode.Uri) {
-        // Check if the changed file matches any AI tool pattern
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) return;
-        const rootPath = workspaceFolders[0].uri.fsPath;
-        const relativePath = path.relative(rootPath.toLowerCase(), uri.fsPath.toLowerCase()).split(path.sep).join('/');
+    private listRuleFiles(rootPath: string, config: AIConfig): string[] {
+        const ruleRootPath = path.join(rootPath, config.ruleRoot);
+        if (!fs.existsSync(ruleRootPath)) return [];
 
-        let relevant = false;
-        const aiTools = AITool.getInstance().getAllAIConfigs();
-        for (const config of Object.values(aiTools)) {
-            if (config.patterns.some(p => minimatch(relativePath, p, { dot: true, nocase: true }))) {
-                relevant = true;
-                break;
-            }
+        if (config.strategy === 'single-file') {
+            const stat = fs.statSync(ruleRootPath);
+            return stat.isFile() ? [ruleRootPath] : [];
         }
 
-        if (relevant) {
-            this.debouncer.debounce(() => this.checkAndSync());
-        }
-    }
-
-    private async collectRuleFiles(rootPath: string, config: AIConfig, aiKey: string | undefined, allRules: { ai: string, file: string, mtime: number }[] | undefined, sources: { path: string, content: string }[] | undefined = undefined) {
-        for (const pattern of config.patterns) {
-            try {
-                const relativePattern = new vscode.RelativePattern(rootPath, pattern);
-                const files = await vscode.workspace.findFiles(relativePattern, null);
-
-                for (const fileUri of files) {
-                    const filePath = fileUri.fsPath;
-                    try {
-                        const stat = fs.statSync(filePath);
-                        if (stat.isFile()) {
-                            if (allRules && aiKey) {
-                                allRules.push({ ai: aiKey, file: filePath, mtime: stat.mtimeMs });
-                            }
-                            if (sources) {
-                                sources.push({ path: filePath, content: fs.readFileSync(filePath, 'utf-8') });
-                            }
-                        }
-                    } catch (e) {
-                        Logger.error(`Error processing file ${filePath}`, e);
+        const results: string[] = [];
+        const extension = config.extension?.toLowerCase();
+        const stack = [ruleRootPath];
+        while (stack.length > 0) {
+            const current = stack.pop() as string;
+            const entries = fs.readdirSync(current, { withFileTypes: true });
+            for (const entry of entries) {
+                const entryPath = path.join(current, entry.name);
+                if (entry.isDirectory()) {
+                    stack.push(entryPath);
+                } else if (entry.isFile()) {
+                    if (!extension || entry.name.toLowerCase().endsWith(extension)) {
+                        results.push(entryPath);
                     }
                 }
-            } catch (e) {
-                Logger.error(`Error searching files for pattern ${pattern}`, e);
             }
         }
+        return results;
+    }
+
+    private readRuleStats(aiKey: string, filePaths: string[]): RuleStat[] {
+        const rules: RuleStat[] = [];
+        for (const filePath of filePaths) {
+            try {
+                const stat = fs.statSync(filePath);
+                if (stat.isFile()) {
+                    rules.push({ ai: aiKey, file: filePath, mtime: stat.mtimeMs });
+                }
+            } catch (e) {
+                Logger.error(`Error processing file ${filePath}`, e);
+            }
+        }
+        return rules;
+    }
+
+    private readRuleFiles(filePaths: string[]): RuleFile[] {
+        const sources: RuleFile[] = [];
+        for (const filePath of filePaths) {
+            try {
+                const stat = fs.statSync(filePath);
+                if (stat.isFile()) {
+                    sources.push({ path: filePath, content: fs.readFileSync(filePath, 'utf-8') });
+                }
+            } catch (e) {
+                Logger.error(`Error processing file ${filePath}`, e);
+            }
+        }
+        return sources;
     }
 
     /**
@@ -198,22 +211,21 @@ export class RuleService {
         const rootPath = workspaceFolders[0].uri.fsPath;
 
         // 1. Collect all rule files and their mtimes
-        const allRules: { ai: string, file: string, mtime: number }[] = [];
+        const allRules: RuleStat[] = [];
         const aiTools = AITool.getInstance().getAllAIConfigs();
 
         for (const [aiKey, config] of Object.entries(aiTools)) {
-            await this.collectRuleFiles(rootPath, config, aiKey, allRules);
+            const filePaths = this.listRuleFiles(rootPath, config);
+            allRules.push(...this.readRuleStats(aiKey, filePaths));
         }
 
         Logger.log(`Found ${allRules.length} rules.`);
         if (allRules.length === 0) return;
 
-        const aiMaxMtimes: Record<string, number> = {};
-        for (const rule of allRules) {
-            if (!aiMaxMtimes[rule.ai] || rule.mtime > aiMaxMtimes[rule.ai]) {
-                aiMaxMtimes[rule.ai] = rule.mtime;
-            }
-        }
+        const aiMaxMtimes = allRules.reduce<Record<string, number>>((acc, rule) => {
+            acc[rule.ai] = Math.max(acc[rule.ai] ?? 0, rule.mtime);
+            return acc;
+        }, {});
 
         // 2. Filter candidates (ignore isFromSynced)
         const validCandidates = allRules.filter(rule => {
@@ -275,30 +287,7 @@ export class RuleService {
         if (this.tryAcquireLock(rootPath, currentToolKey)) {
             try {
                 if (await this.syncRules(latest.ai, currentToolKey, rootPath)) {
-                    // Update target sync state
-                    const newTargetState: SyncState = {
-                        lastModified: latest.mtime,
-                        isFromSynced: true,
-                        source: latest.ai,
-                        syncedTo: targetState?.syncedTo || []
-                    };
-                    LocalStorage.getInstance().setData(targetRuleRoot, newTargetState);
-
-                    // Update source sync state
-                    const sourceRuleRoot = path.join(rootPath, aiTools[latest.ai].ruleRoot);
-                    const sourceState = this.getSyncState(sourceRuleRoot, aiMaxMtimes[latest.ai]) || {
-                        lastModified: latest.mtime,
-                        isFromSynced: false,
-                        source: undefined,
-                        syncedTo: []
-                    };
-
-                    if (!sourceState.syncedTo.includes(currentToolKey)) {
-                        sourceState.syncedTo.push(currentToolKey);
-                    }
-                    // Update lastModified in case it changed during our read? 
-                    // Ideally we should re-read stat, but let's assume stable for now or next cycle fixes it.
-                    LocalStorage.getInstance().setData(sourceRuleRoot, sourceState);
+                    this.updateSyncStates(rootPath, aiTools, latest, currentToolKey, targetState, aiMaxMtimes);
                 }
             } finally {
                 this.releaseLock(rootPath, currentToolKey);
@@ -401,8 +390,39 @@ export class RuleService {
         if (targetConfig.strategy === 'single-file') {
             return new SingleFileRuleBuilder(targetConfig.ruleRoot);
         } else {
-            return new FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.preferredExtension);
+            return new FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.extension);
         }
+    }
+
+    private updateSyncStates(
+        rootPath: string,
+        aiTools: Record<string, AIConfig>,
+        latest: RuleStat,
+        targetAi: string,
+        targetState: SyncState | null,
+        aiMaxMtimes: Record<string, number>
+    ) {
+        const targetRuleRoot = path.join(rootPath, aiTools[targetAi].ruleRoot);
+        const newTargetState: SyncState = {
+            lastModified: latest.mtime,
+            isFromSynced: true,
+            source: latest.ai,
+            syncedTo: targetState?.syncedTo || []
+        };
+        LocalStorage.getInstance().setData(targetRuleRoot, newTargetState);
+
+        const sourceRuleRoot = path.join(rootPath, aiTools[latest.ai].ruleRoot);
+        const sourceState = this.getSyncState(sourceRuleRoot, aiMaxMtimes[latest.ai]) || {
+            lastModified: latest.mtime,
+            isFromSynced: false,
+            source: undefined,
+            syncedTo: []
+        };
+
+        if (!sourceState.syncedTo.includes(targetAi)) {
+            sourceState.syncedTo.push(targetAi);
+        }
+        LocalStorage.getInstance().setData(sourceRuleRoot, sourceState);
     }
 
     /**
@@ -420,9 +440,12 @@ export class RuleService {
 
         if (!sourceConfig || !targetConfig) return false;
 
-        // Collect source contents
-        const sources: { path: string, content: string }[] = [];
-        await this.collectRuleFiles(rootPath, sourceConfig, undefined, undefined, sources);
+        if (!this.isStrategyCompatible(sourceConfig, targetConfig, rootPath)) {
+            return false;
+        }
+
+        const filePaths = this.listRuleFiles(rootPath, sourceConfig);
+        const sources = this.readRuleFiles(filePaths);
 
         if (sources.length === 0) return false;
 
@@ -465,6 +488,17 @@ export class RuleService {
             this.showRevertNotification(rootPath, previousContents, targetAi);
         }
         return changed;
+    }
+
+    private isStrategyCompatible(sourceConfig: AIConfig, targetConfig: AIConfig, rootPath: string): boolean {
+        if (sourceConfig.strategy === 'single-file' && targetConfig.strategy === 'folder') {
+            const existing = this.listRuleFiles(rootPath, targetConfig);
+            if (existing.length > 1) {
+                Logger.log(`Skipping sync: ${targetConfig.name} already has multiple rule files.`);
+                return false;
+            }
+        }
+        return true;
     }
 
     private showRevertNotification(rootPath: string, previousContents: Record<string, string | null>, targetAi: string) {

@@ -1,10 +1,8 @@
-package com.oneide.services.cluster.roles
+package com.oneide.services.cluster
 
-import com.oneide.models.IdeMetaData
-import com.oneide.models.State
+import com.oneide.models.Role
 import com.oneide.services.ClusterService
 import com.oneide.utils.Logger
-import com.oneide.models.NodeInfo
 
 interface IRole {
     fun init()
@@ -16,34 +14,45 @@ interface IRole {
 abstract class BaseRole(protected val cluster: ClusterService) : IRole {
     protected val logger
         get() = Logger.withProject(cluster.project)
+    
+    protected val actionRegistry: ActionRegistry
+        get() = cluster.actionRegistry
+    
+    protected abstract val role: Role
 
     override fun dispose() {
         // Default cleanup
     }
 
     override fun onUserActivity() {
-        // Default: do nothing
+        // Fire user activity action for this role
+        actionRegistry.fireAction(role, ActionRegistry.ACTION_USER_ACTIVITY)
     }
 
     override fun onHeartbeat() {
-        // Default: do nothing
+        // Fire heartbeat action for this role
+        actionRegistry.fireAction(role, ActionRegistry.ACTION_HEARTBEAT)
     }
 }
 
 class Follower(cluster: ClusterService) : BaseRole(cluster) {
+    override val role = Role.FOLLOWER
     private var lastLeaderId: String? = null
 
     override fun init() {
         logger.info("Role: Follower initialized")
-        cluster.getStateService().startWatching()
+        actionRegistry.fireAction(role, ActionRegistry.ACTION_INIT)
     }
 
     override fun dispose() {
         super.dispose()
-        cluster.getStateService().stopWatching()
     }
 
     override fun onUserActivity() {
+        // Fire action first
+        super.onUserActivity()
+        
+        // Then handle role-specific logic
         if (!cluster.checkLeaderHealth()) {
             logger.info(
                 "User activity detected on Follower and Leader unhealthy -> Switching to Candidate"
@@ -63,12 +72,16 @@ class Follower(cluster: ClusterService) : BaseRole(cluster) {
 }
 
 class Candidate(cluster: ClusterService) : BaseRole(cluster) {
+    override val role = Role.CANDIDATE
+    
     override fun init() {
         logger.info("Role: Candidate initialized")
+        actionRegistry.fireAction(role, ActionRegistry.ACTION_INIT)
         tryElection()
     }
 
     override fun onUserActivity() {
+        super.onUserActivity()
         tryElection()
     }
 
@@ -96,17 +109,18 @@ class Candidate(cluster: ClusterService) : BaseRole(cluster) {
 }
 
 class Leader(cluster: ClusterService) : BaseRole(cluster) {
-    private var lastState: State? = null
+    override val role = Role.LEADER
 
     override fun init() {
         logger.info("Role: Leader initialized")
         cluster.updateLeaderHeartbeat()
-        publishCurrentState()
+        actionRegistry.fireAction(role, ActionRegistry.ACTION_INIT)
     }
 
     override fun onUserActivity() {
         cluster.updateLeaderHeartbeat()
-        publishCurrentState()
+        // Fire action - SyncService listens for this to publish state
+        super.onUserActivity()
     }
 
     override fun onHeartbeat() {
@@ -116,21 +130,6 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
                 "Leader: Found another leader or leader file missing, downgrading to Follower"
             )
             cluster.becomeFollower()
-        }
-    }
-
-    private fun publishCurrentState() {
-        val connector = cluster.getIdeConnector()
-        val state = connector.captureState()
-
-        if (state != lastState) {
-            Logger.info("State changed, publishing new state", IdeMetaData.getInstance(cluster.project))
-            cluster.getStateService().publishState(state, cluster.getNodeId())
-            logger.info("State changed, publishing new state")
-            lastState = state
-        } else {
-            // Logger.info("State unchanged, skipping publish", IdeMetaData.getInstance(cluster.project))
-            logger.info("State unchanged, skipping publish")
         }
     }
 }

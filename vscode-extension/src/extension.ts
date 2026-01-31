@@ -3,11 +3,13 @@ import { SyncService } from './syncService';
 import { RuleService } from './services/RuleService';
 import { ConfigService } from './services/ConfigService';
 import { AITool } from './services/AITool';
+import { OneIdeCore } from './services/OneIdeCore';
 import { Logger } from './logger';
 
 let syncService: SyncService;
 let ruleService: RuleService;
 let configService: ConfigService;
+let oneIdeCore: OneIdeCore;
 
 /**
  * Activates the extension.
@@ -26,10 +28,18 @@ export function activate(context: vscode.ExtensionContext) {
         // Initialize AITool early to ensure it's available for all services
         AITool.initialize(context, configService);
 
-        syncService = new SyncService(configService);
+        oneIdeCore = new OneIdeCore(configService);
+        context.subscriptions.push(oneIdeCore);
+
+        // Create SyncService with ClusterService, StateService, and IdeConnector
+        syncService = new SyncService(
+            oneIdeCore.getClusterService(),
+            oneIdeCore.getStateService(),
+            oneIdeCore.getIdeConnector()
+        );
         syncService.start();
 
-        ruleService = new RuleService(configService);
+        ruleService = new RuleService(configService, oneIdeCore.getClusterService());
         ruleService.start();
 
         // Register Toggle Command
@@ -63,6 +73,9 @@ export function deactivate() {
     }
     if (ruleService) {
         ruleService.dispose();
+    }
+    if (oneIdeCore) {
+        oneIdeCore.dispose();
     }
     if (configService) {
         configService.dispose();

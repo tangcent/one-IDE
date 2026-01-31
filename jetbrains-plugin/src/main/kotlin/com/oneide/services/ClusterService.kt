@@ -2,11 +2,17 @@ package com.oneide.services
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.oneide.models.*
 import com.oneide.OneIde
-import com.oneide.services.cluster.roles.*
 import com.oneide.services.cluster.ClusterConstants
+import com.oneide.services.cluster.ActionRegistry
+import com.oneide.services.cluster.Candidate
+import com.oneide.services.cluster.Follower
+import com.oneide.services.cluster.IRole
+import com.oneide.services.cluster.Leader
 import com.oneide.utils.Logger
 import java.io.File
 import java.util.concurrent.Executors
@@ -25,19 +31,27 @@ import java.util.concurrent.TimeUnit
  * - FOLLOWER: Listens for state changes published by the Leader and applies them locally.
  * - CANDIDATE: A temporary state when a Follower detects an unhealthy Leader and attempts to become Leader.
  */
+@Service(Service.Level.PROJECT)
 class ClusterService(
-    private val nodeId: String,
-    val project: Project,
-    private val ideConnector: IdeConnector,
-    private val stateService: StateService
-) {
+    val project: Project
+) : Disposable {
     private val logger = Logger.withProject(project)
     private val clusterDir: File = OneIde.oneIdeDir.resolve("cluster").toFile()
-
-    private var isPaused = false
+    private val metaData = IdeMetaData.getInstance(project)
+    private val configService = ConfigService.getInstance(project)
+    private val ideConnector: IdeConnector = IdeConnector(project, configService)
+    private val nodeId: String = metaData.id
 
     private var currentRole: IRole? = null
     private var roleType: Role = Role.FOLLOWER
+
+    private val roleChangeListeners = mutableSetOf<(role: Role) -> Unit>()
+    
+    /**
+     * Action registry for role-based actions.
+     * Business services register actions, roles fire them.
+     */
+    val actionRegistry = ActionRegistry()
 
     private val leaderFile: File
 
@@ -49,9 +63,8 @@ class ClusterService(
 
         leaderFile = File(clusterDir, "leader.json")
 
-        // Setup dependencies
-        ideConnector.setOnUserActivity { onUserActivity() }
-        stateService.setOnStateReceived { state -> onStateReceived(state) }
+        // Setup IdeConnector to notify roles of user activity
+        ideConnector.setOnUserActivity { currentRole?.onUserActivity() }
 
         startHeartbeat()
 
@@ -59,18 +72,29 @@ class ClusterService(
         becomeFollower()
     }
 
-    fun setPaused(paused: Boolean) {
-        isPaused = paused
-        if (paused) {
-            logger.info("ClusterService paused")
-        } else {
-            logger.info("ClusterService resumed")
+    fun getIdeConnector(): IdeConnector = ideConnector
+    fun getNodeId(): String = nodeId
+    fun getRoleType(): Role = roleType
+
+    fun addRoleChangeListener(listener: (role: Role) -> Unit): () -> Unit {
+        roleChangeListeners.add(listener)
+        return {
+            roleChangeListeners.remove(listener)
         }
     }
 
-    fun getIdeConnector(): IdeConnector = ideConnector
-    fun getStateService(): StateService = stateService
-    fun getNodeId(): String = nodeId
+    /**
+     * Register an action listener for a specific role and action name.
+     * Delegates to ActionRegistry.
+     * 
+     * @param role The role to listen for, or null to listen for all roles
+     * @param actionName The name of the action to listen for (e.g., "userActivity", "heartbeat")
+     * @param action The callback to invoke when the action occurs
+     * @return An unsubscribe function to remove the listener
+     */
+    fun addAction(role: Role?, actionName: String, action: () -> Unit): () -> Unit {
+        return actionRegistry.addAction(role, actionName, action)
+    }
 
     @Synchronized
     fun becomeFollower() {
@@ -96,26 +120,19 @@ class ClusterService(
         roleType = type
         currentRole = newRole
         currentRole?.init()
-    }
-
-    private fun onUserActivity() {
-        if (isPaused) return
-        currentRole?.onUserActivity()
-    }
-
-    private fun onStateReceived(state: State) {
-        if (isPaused) return
-        if (roleType == Role.FOLLOWER) {
-            ideConnector.applyState(state)
+        for (listener in roleChangeListeners) {
+            try {
+                listener(type)
+            } catch (e: Exception) {
+                logger.error("Role change listener error", e)
+            }
         }
     }
 
     private fun startHeartbeat() {
         scheduler.scheduleAtFixedRate({
             try {
-                if (!isPaused) {
-                    currentRole?.onHeartbeat()
-                }
+                currentRole?.onHeartbeat()
             } catch (e: Exception) {
                 // ignore
             }
@@ -123,14 +140,14 @@ class ClusterService(
     }
 
     fun updateLeaderHeartbeat() {
-        val pluginVersion = IdeMetaData.getInstance(project).pluginVersion
+        val pluginVersion = metaData.pluginVersion
         val info =
             NodeInfo(
                 id = nodeId,
                 timestamp = System.currentTimeMillis(),
                 lastHeartbeat = System.currentTimeMillis(),
                 pluginVersion = pluginVersion,
-                ide = IdeMetaData.getInstance(project).ide
+                ide = metaData.ide
             )
         try {
             leaderFile.writeText(mapper.writeValueAsString(info))
@@ -211,8 +228,14 @@ class ClusterService(
         }
     }
 
-    fun dispose() {
+    override fun dispose() {
         scheduler.shutdown()
         currentRole?.dispose()
+        roleChangeListeners.clear()
+        actionRegistry.clear()
+    }
+
+    companion object {
+        fun getInstance(project: Project): ClusterService = project.getService(ClusterService::class.java)
     }
 }

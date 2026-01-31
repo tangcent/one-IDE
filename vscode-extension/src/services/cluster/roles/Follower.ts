@@ -1,22 +1,28 @@
 import { BaseRole } from './BaseRole';
 import { Logger } from '../../../logger';
+import { ActionRegistry, RoleType } from '../ActionRegistry';
 
 export class Follower extends BaseRole {
     private lastLeaderId: string | null = null;
+    
+    protected get role(): RoleType {
+        return RoleType.FOLLOWER;
+    }
 
     async init(): Promise<void> {
         Logger.log('Role: Follower initialized');
-        // Start watching for state changes
-        this.cluster.getStateService().startWatching();
+        this.actionRegistry.fireAction(this.role, ActionRegistry.ACTION_INIT);
     }
 
     override dispose(): void {
         super.dispose();
-        this.cluster.getStateService().stopWatching();
     }
 
     async onUserActivity(): Promise<void> {
-        // User activity -> Check if leader is healthy
+        // Fire action first
+        await super.onUserActivity();
+        
+        // Then handle role-specific logic
         if (!this.cluster.checkLeaderHealth()) {
             Logger.log('Follower: User activity and leader unhealthy -> Switching to Candidate');
             await this.cluster.becomeCandidate();

@@ -1,22 +1,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { State, NodeInfo, CandidatesData } from '../types';
+import { NodeInfo } from '../types';
 import { Logger } from '../logger';
 import { IdeConnector } from './IdeConnector';
-import { StateService } from './StateService';
 import { IRole } from './cluster/roles/BaseRole';
 import { Follower } from './cluster/roles/Follower';
 import { Candidate } from './cluster/roles/Candidate';
 import { Leader } from './cluster/roles/Leader';
 import { IdeMetaData } from '../IdeMetaData';
 import { ClusterConstants } from './cluster/ClusterConstants';
+import { ActionRegistry, RoleType } from './cluster/ActionRegistry';
 
-export enum RoleType {
-    LEADER = 'LEADER',
-    FOLLOWER = 'FOLLOWER',
-    CANDIDATE = 'CANDIDATE'
-}
+// Re-export RoleType for convenience
+export { RoleType } from './cluster/ActionRegistry';
 
 /**
  * Manages the distributed role of this IDE instance within the One-IDE cluster.
@@ -40,14 +37,19 @@ export class ClusterService {
 
     private heartbeatInterval: NodeJS.Timeout | null = null;
 
+    private roleChangeListeners = new Set<(role: RoleType) => void>();
+    
+    /**
+     * Action registry for role-based actions.
+     * Business services register actions, roles fire them.
+     */
+    public readonly actionRegistry = new ActionRegistry();
+
     // File paths
     private leaderFile: string;
 
-    private isPaused = false;
-
     constructor(
-        private ideConnector: IdeConnector,
-        private stateService: StateService
+        private ideConnector: IdeConnector
     ) {
         this.oneIdeDir = path.join(os.homedir(), '.one-ide');
         this.clusterDir = path.join(this.oneIdeDir, 'cluster');
@@ -63,19 +65,13 @@ export class ClusterService {
         this.init();
     }
 
-    public setPaused(paused: boolean) {
-        this.isPaused = paused;
-        if (paused) {
-            Logger.log('ClusterService paused');
-        } else {
-            Logger.log('ClusterService resumed');
-        }
-    }
-
     private async init() {
-        // Setup dependencies
-        this.ideConnector.setOnUserActivity(() => this.onUserActivity());
-        this.stateService.setOnStateReceived((state) => this.onStateReceived(state));
+        // Setup IdeConnector to notify roles of user activity
+        this.ideConnector.setOnUserActivity(() => {
+            if (this.currentRole) {
+                this.currentRole.onUserActivity();
+            }
+        });
 
         this.startHeartbeat();
 
@@ -103,6 +99,30 @@ export class ClusterService {
         await this.switchRole(new Leader(this), RoleType.LEADER);
     }
 
+    public getRoleType(): RoleType {
+        return this.roleType;
+    }
+
+    public addRoleChangeListener(listener: (role: RoleType) => void): () => void {
+        this.roleChangeListeners.add(listener);
+        return () => {
+            this.roleChangeListeners.delete(listener);
+        };
+    }
+
+    /**
+     * Register an action listener for a specific role and action name.
+     * Delegates to ActionRegistry.
+     * 
+     * @param role The role to listen for, or null to listen for all roles
+     * @param actionName The name of the action to listen for (e.g., "userActivity", "heartbeat")
+     * @param action The callback to invoke when the action occurs
+     * @returns An unsubscribe function to remove the listener
+     */
+    public addAction(role: RoleType | null, actionName: string, action: () => void): () => void {
+        return this.actionRegistry.addAction(role, actionName, action);
+    }
+
     private async switchRole(newRole: IRole, type: RoleType) {
         if (this.currentRole) {
             this.currentRole.dispose();
@@ -111,21 +131,12 @@ export class ClusterService {
         this.roleType = type;
         this.currentRole = newRole;
         await this.currentRole.init();
-    }
-
-    // --- Events ---
-
-    private async onUserActivity() {
-        if (this.isPaused) return;
-        if (this.currentRole) {
-            await this.currentRole.onUserActivity();
-        }
-    }
-
-    private async onStateReceived(state: State) {
-        if (this.isPaused) return;
-        if (this.roleType === RoleType.FOLLOWER) {
-            await this.ideConnector.applyState(state);
+        for (const listener of this.roleChangeListeners) {
+            try {
+                listener(type);
+            } catch (e) {
+                Logger.error('Role change listener error', e);
+            }
         }
     }
 
@@ -133,10 +144,6 @@ export class ClusterService {
 
     public getIdeConnector() {
         return this.ideConnector;
-    }
-
-    public getStateService() {
-        return this.stateService;
     }
 
     public getNodeId() {
@@ -211,7 +218,6 @@ export class ClusterService {
 
     private startHeartbeat() {
         this.heartbeatInterval = setInterval(async () => {
-            if (this.isPaused) return;
             if (this.currentRole) {
                 await this.currentRole.onHeartbeat();
             }
@@ -252,6 +258,8 @@ export class ClusterService {
         if (this.currentRole) {
             this.currentRole.dispose();
         }
+        this.roleChangeListeners.clear();
+        this.actionRegistry.clear();
 
         // Cleanup my node directory
         try {
