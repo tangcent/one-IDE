@@ -1,4 +1,5 @@
 import { ClusterService } from '../../ClusterService';
+import { ActionRegistry, RoleType } from '../ActionRegistry';
 
 export interface IRole {
     init(): Promise<void>;
@@ -9,6 +10,12 @@ export interface IRole {
 
 export abstract class BaseRole implements IRole {
     constructor(protected cluster: ClusterService) {}
+    
+    protected get actionRegistry(): ActionRegistry {
+        return this.cluster.actionRegistry;
+    }
+    
+    protected abstract get role(): RoleType;
 
     abstract init(): Promise<void>;
     
@@ -17,10 +24,12 @@ export abstract class BaseRole implements IRole {
     }
 
     async onUserActivity(): Promise<void> {
-        // Default: do nothing
+        // Fire user activity action for this role
+        this.actionRegistry.fireAction(this.role, ActionRegistry.ACTION_USER_ACTIVITY);
     }
 
     async onHeartbeat(): Promise<void> {
-        // Default: do nothing
+        // Fire heartbeat action for this role
+        this.actionRegistry.fireAction(this.role, ActionRegistry.ACTION_HEARTBEAT);
     }
 }

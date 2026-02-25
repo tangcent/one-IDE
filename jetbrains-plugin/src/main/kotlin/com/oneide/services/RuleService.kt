@@ -3,14 +3,14 @@ package com.oneide.services
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.openapi.vfs.newvfs.BulkFileListener
-import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.util.Disposer
+import com.oneide.models.Role
 import com.oneide.utils.Debouncer
 import com.oneide.utils.Logger
 import java.io.File
@@ -24,6 +24,8 @@ import java.util.*
  */
 data class RuleFile(val path: String, val content: String, val lastModified: Long = 0)
 
+data class RuleStat(val ai: String, val file: File, val mtime: Long)
+
 /**
  * Interface for building rule files for a target AI tool.
  */
@@ -36,20 +38,18 @@ interface RuleBuilder {
  *
  * @property ruleRoot The root directory for the rules.
  */
-class FolderRuleBuilder(private val ruleRoot: String, private val preferredExtension: String? = null) : RuleBuilder {
+class FolderRuleBuilder(private val ruleRoot: String, private val extension: String? = null) : RuleBuilder {
     override fun buildRules(sourceFiles: List<RuleFile>, sourceAi: String): List<RuleFile> {
         return sourceFiles.map { file ->
             var name = File(file.path).name
 
-            if (preferredExtension != null) {
-                if (name.endsWith(".md") || name.endsWith(".mdc")) {
-                    val ext = if (name.endsWith(".md")) ".md" else ".mdc"
-                    name = name.substring(0, name.length - ext.length) + preferredExtension
-                } else if (!name.endsWith(preferredExtension)) {
-                    name += preferredExtension
+            if (extension != null) {
+                val ext = File(name).extension
+                if (ext.isNotEmpty() && !name.endsWith(extension)) {
+                    name = name.substring(0, name.length - ext.length - 1) + extension
+                } else if (ext.isEmpty()) {
+                    name += extension
                 }
-            } else {
-                if (!name.endsWith(".md") && !name.endsWith(".mdc")) name += ".md"
             }
             // name = "${sourceAi.lowercase()}_$name" // Keep original filename
 
@@ -96,18 +96,22 @@ data class SyncState(
 
 /**
  * Service responsible for synchronizing AI rules between different tools.
- * It monitors file changes and triggers synchronization when rules are modified.
+ * It triggers a synchronization check only when this IDE instance becomes cluster Leader.
  *
  * @property project The IntelliJ project.
  */
-class RuleService(private val project: Project) {
+class RuleService(
+    private val project: Project,
+    private val clusterService: ClusterService
+) {
     private val debouncer = Debouncer(1000)
     private val currentAppName = ApplicationNamesInfo.getInstance().fullProductName
     private val logger = Logger.withProject(project)
+    private var unsubscribeRoleChange: (() -> Unit)? = null
 
     /**
      * Starts the RuleService.
-     * Registers file listeners and performs an initial sync check.
+     * Triggers synchronization only when this instance becomes the cluster Leader.
      */
     fun start() {
         val configService = ConfigService.getInstance(project)
@@ -117,52 +121,48 @@ class RuleService(private val project: Project) {
         }
 
         logger.info("Starting RuleService for project: ${project.name}. App: $currentAppName")
-
-        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
-            override fun after(events: List<VFileEvent>) {
-                val relevantEvents = events.filter { event ->
-                    val path = event.path.lowercase()
-                    AITool.instance.getAllAIConfigs().values.any { config ->
-                        path.contains(config.ruleRoot.lowercase())
-                    }
-                }
-
-                if (relevantEvents.isNotEmpty()) {
-                    debouncer.debounce { checkAndSync() }
-                }
-            }
+        unsubscribeRoleChange = clusterService.addRoleChangeListener { role ->
+            if (role != Role.LEADER) return@addRoleChangeListener
+            debouncer.debounce { checkAndSync() }
+        }
+        Disposer.register(project, Disposable {
+            unsubscribeRoleChange?.invoke()
+            debouncer.cancel()
         })
-
-        // Initial check
-        debouncer.debounce { checkAndSync() }
     }
 
-    private fun collectRuleFiles(
-        rootPath: String,
-        config: AIConfig,
-        key: String? = null,
-        result: MutableList<Triple<String, File, Long>>? = null,
-        sourceFiles: MutableList<RuleFile>? = null
-    ) {
-        val ruleRootFile = File(rootPath, config.ruleRoot)
-        if (!ruleRootFile.exists()) return
+    private fun listRuleFiles(rootPath: String, config: AIConfig): List<File> {
+        val rootDir = File(rootPath)
+        val ruleRootFile = File(rootDir, config.ruleRoot)
+        if (!ruleRootFile.exists()) return emptyList()
 
-        if (ruleRootFile.isFile) {
-            val relativePath = ruleRootFile.relativeTo(File(rootPath)).path
-            if (config.patterns.any { matchesPattern(relativePath, it) }) {
-                result?.add(Triple(key ?: "", ruleRootFile, ruleRootFile.lastModified()))
-                sourceFiles?.add(RuleFile(relativePath, ruleRootFile.readText(), ruleRootFile.lastModified()))
+        if (config.strategy == "single-file") {
+            return if (ruleRootFile.isFile) listOf(ruleRootFile) else emptyList()
+        }
+
+        val extension = config.extension?.lowercase()
+        return ruleRootFile.walkTopDown()
+            .filter { it.isFile }
+            .filter { extension == null || it.name.lowercase().endsWith(extension) }
+            .toList()
+    }
+
+    private fun collectRuleStats(rootPath: String, aiTools: Map<String, AIConfig>): List<RuleStat> {
+        val allRules = mutableListOf<RuleStat>()
+        for ((key, config) in aiTools) {
+            val files = listRuleFiles(rootPath, config)
+            files.forEach { file ->
+                allRules.add(RuleStat(key, file, file.lastModified()))
             }
-        } else if (ruleRootFile.isDirectory) {
-            ruleRootFile.walkTopDown().forEach { f ->
-                if (f.isFile && (f.extension == "md" || f.extension == "mdc")) {
-                    val relativePath = f.relativeTo(File(rootPath)).path
-                    if (config.patterns.any { matchesPattern(relativePath, it) }) {
-                        result?.add(Triple(key ?: "", f, f.lastModified()))
-                        sourceFiles?.add(RuleFile(relativePath, f.readText(), f.lastModified()))
-                    }
-                }
-            }
+        }
+        return allRules
+    }
+
+    private fun readRuleFiles(rootPath: String, config: AIConfig): List<RuleFile> {
+        val rootDir = File(rootPath)
+        return listRuleFiles(rootPath, config).map { file ->
+            val relativePath = file.relativeTo(rootDir).path
+            RuleFile(relativePath, file.readText(), file.lastModified())
         }
     }
 
@@ -181,23 +181,19 @@ class RuleService(private val project: Project) {
         val basePath = project.basePath ?: return
 
         // 1. Collect all rule files and their mtimes
-        val allRules = mutableListOf<Triple<String, File, Long>>() // AI Name, File, mtime
         val aiTools = AITool.instance.getAllAIConfigs()
-
-        for ((key, config) in aiTools) {
-            collectRuleFiles(basePath, config, key = key, result = allRules)
-        }
+        val allRules = collectRuleStats(basePath, aiTools)
 
         if (allRules.isEmpty()) return
 
-        val aiMaxMtimes = allRules.groupBy { it.first }
-            .mapValues { entry -> entry.value.maxOf { it.third } }
+        val aiMaxMtimes = allRules.groupBy { it.ai }
+            .mapValues { entry -> entry.value.maxOf { it.mtime } }
 
         // 2. Filter candidates (ignore isFromSynced)
-        val validCandidates = allRules.filter { (ai, _, _) ->
-            val config = aiTools[ai]!!
+        val validCandidates = allRules.filter { rule ->
+            val config = aiTools[rule.ai]!!
             val ruleRoot = File(basePath, config.ruleRoot)
-            val mtime = aiMaxMtimes[ai]!!
+            val mtime = aiMaxMtimes[rule.ai]!!
             val state = getSyncState(ruleRoot, mtime)
             state == null || !state.isFromSynced
         }
@@ -205,7 +201,7 @@ class RuleService(private val project: Project) {
         if (validCandidates.isEmpty()) return
 
         // 3. Find the latest modified rule from valid candidates
-        val latest = validCandidates.maxByOrNull { it.third } ?: return
+        val latest = validCandidates.maxByOrNull { it.mtime } ?: return
 
         // 4. Identify current AI tool
         val currentToolKey = detectCurrentTool(project)
@@ -214,13 +210,13 @@ class RuleService(private val project: Project) {
             return
         }
 
-        if (latest.first == currentToolKey) {
+        if (latest.ai == currentToolKey) {
             return
         }
 
         // Check locks
-        if (isLocked(basePath, latest.first)) {
-            logger.info("Sync ignored: Source ${latest.first} is currently locked.")
+        if (isLocked(basePath, latest.ai)) {
+            logger.info("Sync ignored: Source ${latest.ai} is currently locked.")
             return
         }
 
@@ -231,33 +227,19 @@ class RuleService(private val project: Project) {
 
         val targetState = getSyncState(targetRuleRoot, targetMtime)
 
-        if (targetState != null && targetState.source == latest.first && targetMtime == latest.third) {
+        if (targetState != null && targetState.source == latest.ai && targetMtime == latest.mtime) {
             return
         }
 
         // 4. Sync
-        logger.info("Latest rule modification: ${latest.first} - ${latest.second.name}")
-        logger.info("Syncing rules from ${latest.first} to $currentToolKey...")
+        logger.info("Latest rule modification: ${latest.ai} - ${latest.file.name}")
+        logger.info("Syncing rules from ${latest.ai} to $currentToolKey...")
 
         if (tryAcquireLock(basePath, currentToolKey)) {
             try {
-                val syncedMtime = syncRules(latest.first, currentToolKey, basePath)
+                val syncedMtime = syncRules(latest.ai, currentToolKey, basePath)
                 if (syncedMtime > 0) {
-                    // Update target state
-                    val newTargetState = SyncState()
-                    newTargetState.source = latest.first
-                    newTargetState.lastModified = syncedMtime
-                    newTargetState.isFromSynced = true
-                    LocalStorage.setData(targetRuleRoot.absolutePath, newTargetState)
-
-                    // Update source state
-                    val sourceConfig = aiTools[latest.first]!!
-                    val sourceRuleRoot = File(basePath, sourceConfig.ruleRoot)
-                    val sourceState = getSyncState(sourceRuleRoot, aiMaxMtimes[latest.first]!!) ?: SyncState()
-                    if (!sourceState.syncedTo.contains(currentToolKey)) {
-                        sourceState.syncedTo.add(currentToolKey)
-                        LocalStorage.setData(sourceRuleRoot.absolutePath, sourceState)
-                    }
+                    updateSyncStates(basePath, aiTools, latest, currentToolKey, aiMaxMtimes, syncedMtime)
                 }
             } catch (e: Exception) {
                 logger.error("Sync failed", e)
@@ -266,22 +248,6 @@ class RuleService(private val project: Project) {
             }
         } else {
             logger.info("Skipping sync: Could not acquire lock for $currentToolKey.")
-        }
-    }
-
-    private fun matchesPattern(relativePath: String, pattern: String): Boolean {
-        val normPath = relativePath.replace(File.separator, "/")
-        val normPattern = pattern.replace(File.separator, "/")
-
-        if (normPattern.endsWith("/**/*")) {
-            val prefix = normPattern.removeSuffix("/**/*")
-            return normPath.startsWith("$prefix/")
-        } else if (normPattern.endsWith("/*")) {
-            val prefix = normPattern.removeSuffix("/*")
-            val parent = normPath.substringBeforeLast("/", "")
-            return parent == prefix
-        } else {
-            return normPath == normPattern
         }
     }
 
@@ -341,7 +307,30 @@ class RuleService(private val project: Project) {
         return if (targetConfig.strategy == "single-file") {
             SingleFileRuleBuilder(targetConfig.ruleRoot)
         } else {
-            FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.preferredExtension)
+            FolderRuleBuilder(targetConfig.ruleRoot, targetConfig.extension)
+        }
+    }
+
+    private fun updateSyncStates(
+        basePath: String,
+        aiTools: Map<String, AIConfig>,
+        latest: RuleStat,
+        targetAi: String,
+        aiMaxMtimes: Map<String, Long>,
+        syncedMtime: Long
+    ) {
+        val newTargetState = SyncState()
+        newTargetState.source = latest.ai
+        newTargetState.lastModified = syncedMtime
+        newTargetState.isFromSynced = true
+        LocalStorage.setData(File(basePath, aiTools[targetAi]!!.ruleRoot).absolutePath, newTargetState)
+
+        val sourceConfig = aiTools[latest.ai]!!
+        val sourceRuleRoot = File(basePath, sourceConfig.ruleRoot)
+        val sourceState = getSyncState(sourceRuleRoot, aiMaxMtimes[latest.ai] ?: 0L) ?: SyncState()
+        if (!sourceState.syncedTo.contains(targetAi)) {
+            sourceState.syncedTo.add(targetAi)
+            LocalStorage.setData(sourceRuleRoot.absolutePath, sourceState)
         }
     }
 
@@ -352,8 +341,9 @@ class RuleService(private val project: Project) {
             val targetConfig = aiTools[targetAi] ?: return 0L
 
             // Collect source contents
-            val sources = mutableListOf<RuleFile>()
-            collectRuleFiles(rootPath, sourceConfig, sourceFiles = sources)
+            if (!isStrategyCompatible(sourceConfig, targetConfig, rootPath)) return 0L
+
+            val sources = readRuleFiles(rootPath, sourceConfig)
 
             if (sources.isEmpty()) return 0L
 
@@ -424,6 +414,17 @@ class RuleService(private val project: Project) {
             logger.error("Error during syncRules", e)
             return 0L
         }
+    }
+
+    private fun isStrategyCompatible(sourceConfig: AIConfig, targetConfig: AIConfig, rootPath: String): Boolean {
+        if (sourceConfig.strategy == "single-file" && targetConfig.strategy == "folder") {
+            val existing = listRuleFiles(rootPath, targetConfig)
+            if (existing.size > 1) {
+                logger.info("Skipping sync: ${targetConfig.name} already has multiple rule files.")
+                return false
+            }
+        }
+        return true
     }
 
     private fun showRevertNotification(rootPath: String, previousContents: Map<String, String?>, targetAi: String) {

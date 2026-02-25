@@ -10,6 +10,7 @@ import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
 import com.intellij.util.Consumer
 import java.awt.event.MouseEvent
+import com.oneide.services.ClusterService
 import com.oneide.services.RuleService
 
 /**
@@ -24,7 +25,7 @@ class OneIDEPlugin : StartupActivity {
         SyncService.getInstance(project)
         
         // Start Rule Service
-        RuleService(project).start()
+        RuleService(project, ClusterService.getInstance(project)).start()
     }
 }
 
@@ -47,6 +48,7 @@ class ToggleSyncAction : AnAction() {
  * Displays the current sync status (On/Off) and allows toggling via click.
  */
 class OneIDEStatusBarWidgetFactory : StatusBarWidgetFactory {
+
     override fun getId(): String = "OneIDEStatusBar"
 
     override fun getDisplayName(): String = "One-IDE Status"
@@ -55,6 +57,7 @@ class OneIDEStatusBarWidgetFactory : StatusBarWidgetFactory {
 
     override fun createWidget(project: Project): StatusBarWidget {
         return object : StatusBarWidget, StatusBarWidget.TextPresentation {
+        
             override fun ID(): String = "OneIDEStatusBar"
 
             override fun getPresentation(): StatusBarWidget.WidgetPresentation = this

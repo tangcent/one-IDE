@@ -2,6 +2,7 @@ package com.oneide.utils
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger as IdeaLogger
+import com.oneide.OneIde
 import com.oneide.models.IdeMetaData
 import java.io.File
 import java.nio.file.Paths
@@ -11,9 +12,7 @@ import java.time.format.DateTimeFormatter
 object Logger {
     private val ideaLogger = IdeaLogger.getInstance("OneIDE")
     private val logFile: File by lazy {
-        val path = Paths.get(System.getProperty("user.home"), ".one-ide", "one-ide.log")
-        path.parent.toFile().mkdirs()
-        path.toFile()
+        resolveLogFile()
     }
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -40,6 +39,24 @@ object Logger {
             }
         } catch (e: Exception) {
             ideaLogger.error("Failed to rotate logs", e)
+        }
+    }
+
+    private fun resolveLogFile(): File {
+        val overrideDir = System.getProperty("oneide.log.dir")?.let { File(it) }
+        val baseDir = overrideDir ?: OneIde.oneIdeDir.toFile()
+        val resolvedDir = ensureWritableDir(baseDir)
+            ?: ensureWritableDir(File(System.getProperty("java.io.tmpdir"), "one-ide"))
+            ?: baseDir
+        return File(resolvedDir, "one-ide.log")
+    }
+
+    private fun ensureWritableDir(dir: File): File? {
+        return try {
+            dir.mkdirs()
+            if (dir.exists() && dir.canWrite()) dir else null
+        } catch (e: Exception) {
+            null
         }
     }
 

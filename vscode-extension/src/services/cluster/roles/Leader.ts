@@ -1,20 +1,22 @@
 import { BaseRole } from './BaseRole';
 import { Logger } from '../../../logger';
+import { ActionRegistry, RoleType } from '../ActionRegistry';
 
 export class Leader extends BaseRole {
-    private lastStateJson: string | null = null;
+    protected get role(): RoleType {
+        return RoleType.LEADER;
+    }
 
     async init(): Promise<void> {
         Logger.log('Role: Leader initialized');
         this.cluster.updateLeaderHeartbeat();
-        
-        // Immediately capture and publish state as we just became leader (likely due to user activity)
-        await this.publishCurrentState();
+        this.actionRegistry.fireAction(this.role, ActionRegistry.ACTION_INIT);
     }
 
     async onUserActivity(): Promise<void> {
         this.cluster.updateLeaderHeartbeat();
-        await this.publishCurrentState();
+        // Fire action - SyncService listens for this to publish state
+        await super.onUserActivity();
     }
 
     async onHeartbeat(): Promise<void> {
@@ -23,20 +25,6 @@ export class Leader extends BaseRole {
         if (!this.cluster.checkIfLeaderIsMe()) {
             Logger.log('Leader: Found another leader or leader file missing, downgrading to Follower');
             await this.cluster.becomeFollower();
-        }
-    }
-
-    private async publishCurrentState() {
-        const connector = this.cluster.getIdeConnector();
-        const state = await connector.captureState();
-        const stateJson = JSON.stringify(state);
-
-        if (stateJson !== this.lastStateJson) {
-            Logger.log('State changed, publishing new state');
-            await this.cluster.getStateService().publishState(state, this.cluster.getNodeId());
-            this.lastStateJson = stateJson;
-        } else {
-            // Logger.log('State unchanged, skipping publish');
         }
     }
 }

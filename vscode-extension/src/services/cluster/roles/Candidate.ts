@@ -1,9 +1,15 @@
 import { BaseRole } from './BaseRole';
 import { Logger } from '../../../logger';
+import { ActionRegistry, RoleType } from '../ActionRegistry';
 
 export class Candidate extends BaseRole {
+    protected get role(): RoleType {
+        return RoleType.CANDIDATE;
+    }
+
     async init(): Promise<void> {
         Logger.log('Role: Candidate initialized');
+        this.actionRegistry.fireAction(this.role, ActionRegistry.ACTION_INIT);
         await this.tryElection();
     }
 
@@ -12,7 +18,7 @@ export class Candidate extends BaseRole {
     }
 
     async onUserActivity(): Promise<void> {
-        // Already candidate, maybe retry election?
+        await super.onUserActivity();
         await this.tryElection();
     }
 

@@ -7,7 +7,7 @@ class RuleServiceTest {
 
     @Test
     fun `test FolderRuleBuilder maintains file structure but ensures markdown extension`() {
-        val builder = FolderRuleBuilder(".trae/rules")
+        val builder = FolderRuleBuilder(".trae/rules", ".md")
         val sourceFiles = listOf(
             RuleFile("some/path/rule1.md", "content1"),
             RuleFile("rule2", "content2") // Missing extension

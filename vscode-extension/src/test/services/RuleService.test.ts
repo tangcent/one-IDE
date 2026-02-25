@@ -5,7 +5,7 @@ describe('RuleBuilders', () => {
     
     describe('FolderRuleBuilder', () => {
         it('should maintain file structure and ensure markdown extension', () => {
-            const builder = new FolderRuleBuilder('.trae/rules');
+            const builder = new FolderRuleBuilder('.trae/rules', '.md');
             const sourceFiles = [
                 { path: 'some/path/rule1.md', content: 'content1' },
                 { path: 'rule2', content: 'content2' } // Missing extension

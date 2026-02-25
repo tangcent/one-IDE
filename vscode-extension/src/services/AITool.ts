@@ -11,14 +11,12 @@ import { ConfigService } from './ConfigService';
 export interface AIConfig {
     /** The display name of the AI tool (e.g., "Cursor", "Trae"). */
     name: string;
-    /** List of glob patterns to identify rule files associated with this tool. */
-    patterns: string[];
     /** The root directory or file path where rules for this tool are stored. */
     ruleRoot: string;
     /** The rule syncing strategy: "folder" (syncs entire directory) or "single-file". */
     strategy: 'folder' | 'single-file';
-    /** The preferred file extension for rules (e.g., ".md", ".mdc"). */
-    preferredExtension?: string;
+    /** The rule file extension for folder-based tools (e.g., ".md", ".mdc"). */
+    extension?: string;
     /** List of plugin IDs (extensions) associated with this tool for detection purposes. */
     plugins: string[];
 }
