@@ -62,6 +62,13 @@
             "plugins": []
         },
         {
+            "name": "Kiro",
+            "ruleRoot": ".kiro/steering",
+            "strategy": "folder",
+            "extension": ".md",
+            "plugins": []
+        },
+        {
             "name": "Antigravity",
             "ruleRoot": ".antigravity/rules",
             "strategy": "folder",
