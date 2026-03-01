@@ -5,6 +5,8 @@
 [![JetBrains Plugin Downloads](https://img.shields.io/jetbrains/plugin/d/29454?label=Downloads)](https://plugins.jetbrains.com/plugin/29454-one-ide)
 [![VS Code Extension Version](https://img.shields.io/visual-studio-marketplace/v/tangcent.one-ide?color=blue&label=VS%20Code%20Extension)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
 [![VS Code Extension Downloads](https://img.shields.io/visual-studio-marketplace/d/tangcent.one-ide?label=Downloads)](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide)
+[![Open VSX Version](https://img.shields.io/open-vsx/v/tangcent/one-ide?color=purple&label=Open%20VSX)](https://open-vsx.org/extension/tangcent/one-ide)
+[![Open VSX Downloads](https://img.shields.io/open-vsx/dt/tangcent/one-ide?label=Downloads)](https://open-vsx.org/extension/tangcent/one-ide)
 
 One-IDE is built for developers who work across multiple environments simultaneously. When you open a project in both a JetBrains IDE and VS Code (or its forks), your editors stay perfectly in sync—providing a seamless transition as you switch between tools.
 
