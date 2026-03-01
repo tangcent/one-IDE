@@ -2,6 +2,13 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.4] - 2026-03-01
+- fix: settings not persisting when toggling off in IDEA settings (#6)
+- feat: Complete Kiro support - add steering rules, update gitignore and README (#5)
+- fix: leader should step down when window loses focus (#4)
+- feat: Add Kiro rules support (#2)
+- refactor(cluster): decouple role actions and sync orchestration across plugins (#1)
+
 ## [1.1.3] - 2026-01-06
 - feat(sync): add pause/resume functionality to cluster service
 
