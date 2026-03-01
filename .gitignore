@@ -30,6 +30,9 @@ state.json
 jetbrains-plugin/build/
 jetbrains-plugin/bin/
 
+# Kiro
+.kiro/settings/mcp.json
+
 # OS
 .DS_Store
 Thumbs.db
