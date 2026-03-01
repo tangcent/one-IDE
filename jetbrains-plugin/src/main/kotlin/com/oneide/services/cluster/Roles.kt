@@ -125,6 +125,11 @@ class Leader(cluster: ClusterService) : BaseRole(cluster) {
 
     override fun onHeartbeat() {
         super.onHeartbeat()
+        if (!cluster.getIdeConnector().isWindowFocused()) {
+            logger.info("Leader: Window lost focus, downgrading to Follower")
+            cluster.becomeFollower()
+            return
+        }
         if (!cluster.checkIfLeaderIsMe()) {
             logger.info(
                 "Leader: Found another leader or leader file missing, downgrading to Follower"

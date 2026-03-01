@@ -21,7 +21,11 @@ export class Leader extends BaseRole {
 
     async onHeartbeat(): Promise<void> {
         await super.onHeartbeat();
-        // Check if I am still the leader
+        if (!this.cluster.getIdeConnector().isWindowFocused()) {
+            Logger.log('Leader: Window lost focus, downgrading to Follower');
+            await this.cluster.becomeFollower();
+            return;
+        }
         if (!this.cluster.checkIfLeaderIsMe()) {
             Logger.log('Leader: Found another leader or leader file missing, downgrading to Follower');
             await this.cluster.becomeFollower();
