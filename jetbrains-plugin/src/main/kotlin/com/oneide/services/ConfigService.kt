@@ -104,8 +104,8 @@ class ConfigService(private val project: Project) : Disposable {
 
         // 2. Update Project Config (and save to PropertiesComponent)
         val properties = PropertiesComponent.getInstance(project)
-        properties.setValue("com.oneide.ai.syncRules", newConfig.syncRules)
-        properties.setValue("com.oneide.ai.currentTool", newConfig.currentTool)
+        properties.setValue("com.oneide.ai.syncRules", newConfig.syncRules, true)
+        properties.setValue("com.oneide.ai.currentTool", newConfig.currentTool, "Auto")
 
         // Update local memory copy
         config.syncRules = newConfig.syncRules
