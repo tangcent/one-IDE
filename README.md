@@ -59,6 +59,7 @@ Supported AI Tools:
 - Junie (`.junie`)
 - Qodo (`.codiumai.toml`, `.codiumai.yaml`)
 - Qoder (`.qoder`)
+- Kiro (`.kiro/steering`)
 - Antigravity (`.antigravity/rules`)
 
 ## Installation
