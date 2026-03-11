@@ -2,6 +2,9 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.5] - 2026-03-12
+- fix: prevent interference with AI coding tools during file edits
+
 ## [1.1.4] - 2026-03-01
 - fix: settings not persisting when toggling off in IDEA settings (#6)
 - feat: Complete Kiro support - add steering rules, update gitignore and README (#5)
