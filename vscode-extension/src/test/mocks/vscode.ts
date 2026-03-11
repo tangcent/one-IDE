@@ -50,6 +50,10 @@ export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3
 export class TabInputText {
     constructor(public uri: any) {}
 }
+export class TabInputTextDiff {
+    constructor(public original: any, public modified: any) {}
+}
+
 export class Position {
     constructor(public line: number, public character: number) {}
 }

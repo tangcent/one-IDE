@@ -64,15 +64,27 @@ export class IdeConnector {
 
     /**
      * Triggers the user activity callback.
-     * Skips if currently applying state.
+     * Skips if currently applying state or if there are unsaved/dirty documents
+     * (which may indicate AI tools are making edits).
      */
     private triggerActivity() {
         if (this.isApplyingState) return;
+
+        // Skip triggering activity if there are dirty diff editors open
+        // This prevents interference with AI coding tools that use diff editors for approval
+        const hasDirtyDiffEditors = vscode.window.tabGroups.all
+            .flatMap(group => group.tabs)
+            .some(tab => tab.input instanceof vscode.TabInputTextDiff && tab.isDirty);
+        
+        if (hasDirtyDiffEditors) {
+            return;
+        }
 
         if (this.onUserActivityCallback) {
             this.onUserActivityCallback();
         }
     }
+
 
     /**
      * Captures the current state of the IDE (opened files, active file, cursor positions).
@@ -196,6 +208,14 @@ export class IdeConnector {
             // we should not close it as the incoming state has no authority over it.
             if (!StateHelper.isInsideRoot(rootPath, fsPath)
                 || !StateHelper.checkPathBelongsToState(state, fsPath)) {
+                continue;
+            }
+
+            // Skip tabs that are dirty (unsaved) or in a diff editor — these may be
+            // pending edits from AI coding tools (e.g. Claude Code, Copilot) and closing
+            // them would abort the edit operation.
+            if (tab.isDirty || tab.input instanceof vscode.TabInputTextDiff) {
+                Logger.log(`Skipping close for modified/diff tab: ${fsPath}`);
                 continue;
             }
 

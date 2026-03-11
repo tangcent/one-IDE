@@ -120,14 +120,27 @@ class IdeConnector(private val project: Project, private val configService: Conf
 
     /**
      * Triggers the user activity callback after a debounce period.
-     * Skips if currently applying state.
+     * Skips if currently applying state or if there are unsaved documents
+     * (which may indicate AI tools are making edits).
      */
     fun triggerActivity() {
         if (isApplyingState) return
+        
+        // Skip triggering activity if there are unsaved/modified documents
+        // This prevents interference with AI coding tools that may be making edits
+        val fileDocumentManager = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
+        val hasUnsavedChanges = fileDocumentManager.unsavedDocuments.isNotEmpty()
+        
+        if (hasUnsavedChanges) {
+            return
+        }
+        
         debouncer.debounce {
             onUserActivityCallback?.invoke()
         }
     }
+
+
 
     /**
      * Captures the current state of the IDE (opened files, active file, cursor positions).
@@ -260,6 +273,15 @@ class IdeConnector(private val project: Project, private val configService: Conf
                 continue
             }
 
+            // Skip files with unsaved changes — these may be pending edits from
+            // AI coding tools (e.g. Claude Code, Copilot) and closing them would
+            // abort the edit operation.
+            val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(file)
+            if (document != null && com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().isDocumentUnsaved(document)) {
+                logger.info("Skipping close for modified file: ${file.path}")
+                continue
+            }
+
             val fileNorm = file.path.normalizePath()
             val keep = filesToOpen.contains(fileNorm)
             if (!keep) {
@@ -267,6 +289,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
                 fileEditorManager.closeFile(file)
             }
         }
+
 
         // 3. Open or Update files
         // Iterate through files in the state and open/activate/scroll them.
