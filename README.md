@@ -16,6 +16,23 @@ One-IDE is built for developers who work across multiple environments simultaneo
 
 - **Cross-IDE Synchronization**: Syncs active file and cursor position between VS Code and JetBrains IDEs.
 - **AI Project Rules Synchronization**: Automatically detects and syncs AI project rules (e.g., `.cursorrules`, `.trae/rules`) between different AI coding tools.
+- **Terminal AI Tool Integration**: Works with terminal AI tools (claude, gemini-cli, kiro-cli, codex, etc.) via `one-ide-cli`, giving them access to your live editor state — active file, open tabs, and selected code.
+
+## Skills (Terminal AI Tools)
+
+When using AI tools in the terminal, they can't see what's open in your IDE. Install the `editor-context` skill to bridge that gap:
+
+```bash
+npx skills add tangcent/one-IDE -g -y
+```
+
+This installs the skill to all detected AI tools globally. The skill guides them to use `one-ide-cli context <workspace>` to fetch your live editor state before responding.
+
+You can also install the CLI directly:
+
+```bash
+npm install -g one-ide-cli
+```
 
 ## Architecture
 
@@ -81,16 +98,6 @@ Alternatively, you can download it from the [JetBrains Marketplace](https://plug
 3. Click **Install**.
 
 Alternatively, you can install it from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide).
-
-## Skills
-
-Install the `editor-context` skill to give terminal AI tools (claude, gemini-cli, kiro-cli, codex, etc.) access to your live IDE editor state:
-
-```bash
-npx skills add tangcent/one-IDE -g -y
-```
-
-See the [skills catalog](./skills/README.md) for details.
 
 ## Development
 
