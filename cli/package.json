@@ -1,0 +1,45 @@
+{
+  "name": "one-ide-cli",
+  "version": "1.0.0",
+  "description": "CLI to access live IDE editor state published by the One-IDE plugin",
+  "main": "build/index.js",
+  "type": "module",
+  "bin": {
+    "one-ide-cli": "build/index.js"
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node build/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tangcent/one-IDE.git",
+    "directory": "cli"
+  },
+  "keywords": [
+    "one-ide",
+    "ide",
+    "editor",
+    "cli",
+    "cursor",
+    "vscode",
+    "jetbrains"
+  ],
+  "author": "tangcent",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tangcent/one-IDE/issues"
+  },
+  "homepage": "https://github.com/tangcent/one-IDE/tree/main/cli#readme",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
