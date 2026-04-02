@@ -20,19 +20,17 @@ One-IDE is built for developers who work across multiple environments simultaneo
 
 ## Skills (Terminal AI Tools)
 
-When using AI tools in the terminal, they can't see what's open in your IDE. Install the `editor-context` skill to bridge that gap:
+When using AI tools in the terminal, they can't see what's open in your IDE. Install the CLI and skill to bridge that gap:
 
 ```bash
+# Install CLI
+npm install -g one-ide-cli
+
+# Install CLI SKILL
 npx skills add tangcent/one-IDE -g -y
 ```
 
-This installs the skill to all detected AI tools globally. The skill guides them to use `one-ide-cli context <workspace>` to fetch your live editor state before responding.
-
-You can also install the CLI directly:
-
-```bash
-npm install -g one-ide-cli
-```
+The skill guides terminal AI tools (claude, gemini-cli, kiro-cli, codex, etc.) to use `one-ide-cli context <workspace>` to fetch your live editor state before responding.
 
 ## Architecture
 
