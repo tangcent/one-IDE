@@ -82,6 +82,16 @@ Alternatively, you can download it from the [JetBrains Marketplace](https://plug
 
 Alternatively, you can install it from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tangcent.one-ide).
 
+## Skills
+
+Install the `editor-context` skill to give terminal AI tools (claude, gemini-cli, kiro-cli, codex, etc.) access to your live IDE editor state:
+
+```bash
+npx skills add tangcent/one-IDE -g -y
+```
+
+See the [skills catalog](./skills/README.md) for details.
+
 ## Development
 
 ### Prerequisites
