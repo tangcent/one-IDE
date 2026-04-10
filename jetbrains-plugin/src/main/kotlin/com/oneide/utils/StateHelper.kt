@@ -30,14 +30,14 @@ object StateHelper {
         val rootPathLower = rootPath.normalizePath()
 
         val filePaths = openedFiles
-            .filter { it.normalizePath().startsWith(rootPathLower) }
+            .filter { isInsideRoot(rootPathLower, it.normalizePath()) }
             .map { it.normalizePath() }
             .toMutableList()
 
         var activeFileInRoot: ActiveFile? = null
         if (activeFile != null) {
             val activePathLower = activeFile.filePath.normalizePath()
-            if (activePathLower.startsWith(rootPathLower)) {
+            if (activePathLower.startsWith(rootPathLower) && (activePathLower.length == rootPathLower.length || activePathLower[rootPathLower.length] == java.io.File.separatorChar)) {
                 activeFileInRoot = activeFile.copy(filePath = activePathLower)
             }
         }
@@ -68,7 +68,7 @@ object StateHelper {
 
         return state.editorState.openedFiles.filter { f ->
             val fPath = f.normalizePath()
-            fPath.startsWith(normalizedRootPath)
+            isInsideRoot(normalizedRootPath, fPath)
         }
     }
 
@@ -83,7 +83,7 @@ object StateHelper {
         val normalizedRootPath = rootPath.normalizePath()
         val active = state.editorState.activeFile ?: return null
 
-        if (active.filePath.normalizePath().startsWith(normalizedRootPath)) {
+        if (isInsideRoot(normalizedRootPath, active.filePath.normalizePath())) {
             return active
         }
         return null
@@ -100,7 +100,7 @@ object StateHelper {
         val p1Raw = if (pathOrState1 is State) pathOrState1.root else pathOrState1.toString()
         val p1 = p1Raw.normalizePath()
         val p2 = path2.normalizePath()
-        return p1.startsWith(p2) || p2.startsWith(p1)
+        return isInsideRoot(p1, p2) || isInsideRoot(p2, p1)
     }
 
     /**

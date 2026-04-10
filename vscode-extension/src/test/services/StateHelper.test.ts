@@ -134,6 +134,9 @@ describe('StateHelper', () => {
             assert.strictEqual(StateHelper.hasIntersection('/User/Project', '/User/Project/Sub'), true);
             assert.strictEqual(StateHelper.hasIntersection('/User/Project/Sub', '/User/Project'), true);
             assert.strictEqual(StateHelper.hasIntersection('/User/Project', '/User/Other'), false);
+            // Paths sharing a prefix but in different directories should NOT intersect
+            assert.strictEqual(StateHelper.hasIntersection('/User/easy-api', '/User/easy-api-universal/apilot'), false);
+            assert.strictEqual(StateHelper.hasIntersection('/User/ProjectA', '/User/ProjectAB'), false);
         });
 
         it('should work with state object', () => {
