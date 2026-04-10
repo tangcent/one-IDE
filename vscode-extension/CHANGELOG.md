@@ -2,6 +2,9 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.6] - 2026-04-10
+- fix: correct path boundary checking in StateHelper
+
 ## [1.1.5] - 2026-03-12
 - fix: prevent interference with AI coding tools during file edits
 
