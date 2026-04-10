@@ -17,13 +17,13 @@ export class StateHelper {
         const rootPathLower = PathUtils.normalizePath(rootPath);
 
         const filePaths: string[] = openedFiles
-            .filter(f => PathUtils.normalizePath(f).startsWith(rootPathLower))
+            .filter(f => StateHelper.isInsideRoot(rootPathLower, PathUtils.normalizePath(f)))
             .map(f => PathUtils.normalizePath(f));
         
         let activeFileInRoot: ActiveFile | undefined = undefined;
         if (activeFile) {
             const activePathLower = PathUtils.normalizePath(activeFile.filePath);
-            if (activePathLower.startsWith(rootPathLower)) {
+            if (activePathLower.startsWith(rootPathLower) && (activePathLower.length === rootPathLower.length || activePathLower[rootPathLower.length] === path.sep)) {
                 activeFileInRoot = {
                     ...activeFile,
                     filePath: activePathLower
@@ -57,7 +57,7 @@ export class StateHelper {
         const p1Raw = typeof pathOrState1 === 'string' ? pathOrState1 : pathOrState1.root;
         const p1 = PathUtils.normalizePath(p1Raw);
         const p2 = PathUtils.normalizePath(path2);
-        return p1.startsWith(p2) || p2.startsWith(p1);
+        return StateHelper.isInsideRoot(p1, p2) || StateHelper.isInsideRoot(p2, p1);
     }
 
     /**
@@ -102,7 +102,7 @@ export class StateHelper {
         return state.editorState.openedFiles.filter(f => {
             try {
                 const fPath = PathUtils.normalizePath(f);
-                return fPath.startsWith(normalizedRootPath);
+                return StateHelper.isInsideRoot(normalizedRootPath, fPath);
             } catch (e) {
                 return false;
             }
@@ -121,7 +121,7 @@ export class StateHelper {
         const active = state.editorState.activeFile;
         if (!active) return undefined;
 
-        if (PathUtils.normalizePath(active.filePath).startsWith(normalizedRootPath)) {
+        if (StateHelper.isInsideRoot(normalizedRootPath, PathUtils.normalizePath(active.filePath))) {
             return active;
         }
         return undefined;

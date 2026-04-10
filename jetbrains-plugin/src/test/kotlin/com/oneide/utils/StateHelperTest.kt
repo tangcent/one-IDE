@@ -141,6 +141,9 @@ class StateHelperTest : BasePlatformTestCase() {
         assertTrue(StateHelper.hasIntersection("/User/Project", "/User/Project/Sub"))
         assertTrue(StateHelper.hasIntersection("/User/Project/Sub", "/User/Project"))
         assertFalse(StateHelper.hasIntersection("/User/Project", "/User/Other"))
+        // Paths sharing a prefix but in different directories should NOT intersect
+        assertFalse(StateHelper.hasIntersection("/User/easy-api", "/User/easy-api-universal/apilot"))
+        assertFalse(StateHelper.hasIntersection("/User/ProjectA", "/User/ProjectAB"))
 
         val rootPath = "/User/Project"
         val rootPathLower = Paths.get(rootPath).toAbsolutePath().normalize().toString().lowercase()
