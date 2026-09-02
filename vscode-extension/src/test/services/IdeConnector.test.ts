@@ -204,5 +204,71 @@ describe('IdeConnector', () => {
         // Instead, we verify the callback is set correctly.
         assert.strictEqual(activityTriggered, false, 'Activity should not be triggered with dirty diff editors');
     });
+
+    it('should not steal OS focus when activating the mirrored active file while the window is unfocused', async () => {
+        mockVSCode.window.state.focused = false;
+        const showCalls: any[] = [];
+        mockVSCode.window.showTextDocument = async (doc: any, options: any) => {
+            showCalls.push(options);
+            return {
+                selection: { active: { line: 0, character: 0 }, isEmpty: true, isEqual: () => false },
+                revealRange: () => {}
+            };
+        };
+        mockVSCode.window.tabGroups.all = [];
+        mockVSCode.workspace.openTextDocument = async () => ({ uri: { fsPath: '/root/file1.ts' } });
+
+        const state = {
+            timestamp: Date.now(),
+            source: 'test',
+            ide: 'test',
+            root: '/root',
+            editorState: {
+                openedFiles: ['/root/file1.ts'],
+                activeFile: { filePath: '/root/file1.ts', cursor: 0, column: 0 }
+            }
+        };
+
+        ideConnector.applyState(state);
+        await new Promise(resolve => setTimeout(resolve, 400));
+
+        assert.strictEqual(showCalls.length, 1, 'showTextDocument should be called once for the active file');
+        assert.strictEqual(
+            showCalls[0].preserveFocus,
+            true,
+            'Unfocused window must preserve focus (not steal it from the other IDE)'
+        );
+    });
+
+    it('should focus the active file when the receiving window is focused', async () => {
+        mockVSCode.window.state.focused = true;
+        const showCalls: any[] = [];
+        mockVSCode.window.showTextDocument = async (doc: any, options: any) => {
+            showCalls.push(options);
+            return {
+                selection: { active: { line: 0, character: 0 }, isEmpty: true, isEqual: () => false },
+                revealRange: () => {}
+            };
+        };
+        mockVSCode.window.tabGroups.all = [];
+        mockVSCode.workspace.openTextDocument = async () => ({ uri: { fsPath: '/root/file1.ts' } });
+
+        const state = {
+            timestamp: Date.now(),
+            source: 'test',
+            ide: 'test',
+            root: '/root',
+            editorState: {
+                openedFiles: ['/root/file1.ts'],
+                activeFile: { filePath: '/root/file1.ts', cursor: 0, column: 0 }
+            }
+        };
+
+        ideConnector.applyState(state);
+        await new Promise(resolve => setTimeout(resolve, 400));
+
+        assert.strictEqual(showCalls.length, 1, 'showTextDocument should be called once for the active file');
+        assert.strictEqual(showCalls[0].preserveFocus, false, 'Focused window should focus the active file');
+    });
 });
 

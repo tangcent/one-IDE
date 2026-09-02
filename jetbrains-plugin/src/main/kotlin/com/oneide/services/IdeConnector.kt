@@ -48,6 +48,9 @@ class IdeConnector(private val project: Project, private val configService: Conf
     // Debouncer for applying state (received from other IDEs) -> Inbound
     internal var applyStateDebouncer = Debouncer(300)
 
+    // Provider for window-focus detection. Overridable in tests to simulate focused/unfocused windows.
+    internal var windowFocusedProvider: () -> Boolean = ::isWindowFocused
+
     private var activeNotification: Notification? = null
 
     init {
@@ -253,6 +256,11 @@ class IdeConnector(private val project: Project, private val configService: Conf
     }
 
     private fun applyEditorState(state: State, projectPathStr: String) {
+        // Only focus/activate the mirrored active file when this IDE window is already focused.
+        // Otherwise (e.g. the user is editing in the other IDE on Windows) opening with focus would
+        // steal OS window focus back to this IDE, causing a focus ping-pong between the two IDEs.
+        val windowFocused = windowFocusedProvider()
+
         val filesToOpen = StateHelper.getFiles(state, projectPathStr)
         val activeFile = StateHelper.getActiveFile(state, projectPathStr)
 
@@ -310,7 +318,7 @@ class IdeConnector(private val project: Project, private val configService: Conf
             val virtualFile = localFileSystem.findFileByPath(activeFile.filePath)
             if (virtualFile != null) {
                 logger.info("Activating file: ${activeFile.filePath}")
-                fileEditorManager.openFile(virtualFile, true)
+                fileEditorManager.openFile(virtualFile, windowFocused)
 
                 val textEditor = fileEditorManager.getTextEditor(virtualFile)
                 if (textEditor != null) {
