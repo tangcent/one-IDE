@@ -4,12 +4,16 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.oneide.models.ActiveFile
+import com.oneide.models.EditorState
 import com.oneide.models.State
 import com.oneide.utils.Debouncer
 import com.intellij.util.ui.UIUtil
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.CountDownLatch
 
 
@@ -194,6 +198,53 @@ class IdeConnectorTest : BasePlatformTestCase() {
         assertTrue("Unsaved file should NOT be closed", fileEditorManager.isFileOpen(virtualFile))
     }
 
+    private fun verifyActiveFileFocusRespectsWindowFocus(windowFocused: Boolean) {
+        val mockDebouncer = createMockDebouncer()
+        ideConnector.applyStateDebouncer = mockDebouncer
+
+        var providerCalled = false
+        ideConnector.windowFocusedProvider = {
+            providerCalled = true
+            windowFocused
+        }
+
+        // Create a physical file inside the temp project root WITHOUT opening it in the editor,
+        // so we can prove that applyState itself performs the open.
+        val basePath = project.basePath!!
+        val filePath = Paths.get(basePath, "focus_file.txt")
+        Files.createDirectories(filePath.parent)
+        Files.write(filePath, "content".toByteArray())
+        val virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(filePath.toString())!!
+        assertFalse(
+            "File should not be open before applying state",
+            FileEditorManager.getInstance(project).isFileOpen(virtualFile)
+        )
+
+        val state = State(
+            timestamp = System.currentTimeMillis(),
+            source = "test-source",
+            ide = "test-ide",
+            root = basePath,
+            editorState = EditorState(
+                openedFiles = mutableListOf(filePath.toString()),
+                activeFile = ActiveFile(filePath = filePath.toString(), cursor = 0, column = 0)
+            )
+        )
+
+        ideConnector.applyState(state)
+        mockDebouncer.lastAction?.invoke()
+        UIUtil.dispatchAllInvocationEvents()
+
+        assertTrue("Window-focus provider should be consulted", providerCalled)
+        // Regardless of focus, the mirrored active file must still be opened (background mirroring).
+        // The flag returned by windowFocusedProvider is what controls openFile(file, focus) so that
+        // an unfocused follower never steals OS window focus on Windows.
+        assertTrue(
+            "Active file should be opened whether the window is focused or not",
+            FileEditorManager.getInstance(project).isFileOpen(virtualFile)
+        )
+    }
+
     // ---- Test methods (thin wrappers, no lambdas) ----
 
     /**
@@ -217,6 +268,19 @@ class IdeConnectorTest : BasePlatformTestCase() {
      * This prevents AI coding tools' pending edits from being discarded.
      */
     fun testApplyStateDoesNotCloseUnsavedFiles() = verifyApplyStateDoesNotCloseUnsavedFiles()
+
+    /**
+     * When the receiving window is NOT focused (e.g. the user is editing in the other IDE),
+     * the mirrored active file must still be opened but WITHOUT stealing OS window focus.
+     * This prevents the Windows focus ping-pong between IDEA and VSCode.
+     */
+    fun testActiveFileNotAffectedWhenWindowUnfocused() = verifyActiveFileFocusRespectsWindowFocus(false)
+
+    /**
+     * When the receiving window IS focused, the mirrored active file is opened normally
+     * (focus is requested as before).
+     */
+    fun testActiveFileAffectedNormallyWhenWindowFocused() = verifyActiveFileFocusRespectsWindowFocus(true)
 
     // ---- Mock classes (private to avoid JUnit 3 discovery) ----
 
