@@ -15,12 +15,8 @@ intellij {
     downloadSources.set(true)
 }
 
-// Disable self-update check that fails build due to GitHub network issues
+// buildSearchableOptions requires extra memory and often OOM on Windows, skip it
 tasks {
-    initializeIntelliJPlugin {
-        enabled = false
-    }
-    // buildSearchableOptions requires extra memory and often OOM on Windows, skip it
     buildSearchableOptions {
         enabled = false
     }
