@@ -189,6 +189,11 @@ export class IdeConnector {
     }
 
     private async applyEditorState(state: State, rootPath: string) {
+        // Only focus/activate the mirrored active file when this IDE window is already focused.
+        // Otherwise (e.g. the user is editing in the other IDE on Windows) focusing would steal
+        // OS window focus back to this IDE, causing a focus ping-pong between the two IDEs.
+        const windowFocused = this.isWindowFocused();
+
         const filesToOpen = StateHelper.getFiles(state, rootPath);
         const activeFile = StateHelper.getActiveFile(state, rootPath);
 
@@ -261,7 +266,7 @@ export class IdeConnector {
                 const doc = await vscode.workspace.openTextDocument(uri);
                 const editor = await vscode.window.showTextDocument(doc, {
                     preview: false,
-                    preserveFocus: false
+                    preserveFocus: !windowFocused
                 });
 
                 if (editor && activeFile.cursor >= 0) {
