@@ -2,6 +2,10 @@
 
 All notable changes to the "one-ide" extension will be documented in this file.
 
+## [1.1.7] - 2026-09-22
+- fix: resolve package.json from its own directory in update_version.sh (#20)
+- fix: prevent window focus ping-pong between IDEs on Windows (#18)
+
 ## [1.1.6] - 2026-04-10
 - fix: correct path boundary checking in StateHelper
 
