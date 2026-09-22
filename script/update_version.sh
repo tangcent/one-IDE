@@ -19,7 +19,9 @@ select_target() {
 # --- Helper: Select Version ---
 select_version() {
     # Try to find current version from vscode package.json as a baseline
-    CURRENT_VERSION=$(node -p "require('$(dirname "$0")/../vscode-extension/package.json').version")
+    # Resolve package.json from its own directory: node is a native binary and
+    # cannot require an MSYS-style absolute path such as /d/repo/package.json.
+    CURRENT_VERSION=$(cd "$(dirname "$0")/../vscode-extension" && node -p "require('./package.json').version")
     echo "Current VS Code version: $CURRENT_VERSION"
 
     IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
